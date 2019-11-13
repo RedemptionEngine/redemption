@@ -25,30 +25,41 @@
 
 namespace swrenderer
 {
+	struct DrawSegmentClipInfo
+	{
+		void SetTopClip(RenderThread* thread, int x1, int x2, const short* ceilingclip);
+		void SetTopClip(RenderThread* thread, int x1, int x2, short value);
+		void SetBottomClip(RenderThread* thread, int x1, int x2, const short* floorclip);
+		void SetBottomClip(RenderThread* thread, int x1, int x2, short value);
+		void SetBackupClip(RenderThread* thread, int x1, int x2, const short* ceilingclip);
+		void SetRangeDrawn(int x1, int x2);
+		void SetRangeUndrawn(int x1, int x2);
+
+		uint8_t silhouette = 0; // 0=none, 1=bottom, 2=top, 3=both
+		bool bFogBoundary = false;
+		int CurrentPortalUniq = 0; // [ZZ] to identify the portal that this drawseg is in. used for sprite clipping.
+		int SubsectorDepth;
+
+		// Pointers to lists for sprite clipping, all three adjusted so [x1] is first value.
+		const short* sprtopclip = nullptr;
+		const short* sprbottomclip = nullptr;
+
+	private:
+		bool sprclipped = false; // True if draw segment was used for clipping sprites
+		const short* bkup = nullptr;
+	};
+
 	struct DrawSegment
 	{
 		seg_t *curline;
 		float light, lightstep;
-		float iscale, iscalestep;
 		short x1, x2; // Same as sx1 and sx2, but clipped to the drawseg
+
 		FWallCoords WallC;
-		float yscale;
-		uint8_t silhouette = 0; // 0=none, 1=bottom, 2=top, 3=both
-		bool bFogBoundary = false;
-
-		// Pointers to lists for sprite clipping, all three adjusted so [x1] is first value.
-		short *sprtopclip = nullptr;
-		short *sprbottomclip = nullptr;
-		fixed_t *maskedtexturecol = nullptr;
-		float *swall = nullptr;
-		short *bkup = nullptr; // sprtopclip backup, for mid and fake textures
-		bool sprclipped = false; // True if draw segment was used for clipping sprites
-		
 		FWallTmapVals tmapvals;
-		
-		int CurrentPortalUniq = 0; // [ZZ] to identify the portal that this drawseg is in. used for sprite clipping.
+		ProjectedWallTexcoords texcoords;
 
-		int SubsectorDepth;
+		DrawSegmentClipInfo drawsegclip;
 
 		bool Has3DFloorWalls() const { return b3DFloorBoundary != 0; }
 		bool Has3DFloorFrontSectorWalls() const { return (b3DFloorBoundary & 2) == 2; }
