@@ -924,6 +924,9 @@ OptionMenu "VideoOptions" protected
 	Slider "$DSPLYMNU_CONTRAST",				"vid_contrast",	   				0.1, 3.0, 0.1
 	Slider "$DSPLYMNU_SATURATION",				"vid_saturation",  				-3.0, 3.0, 0.25, 2
 	StaticText " "
+	Option "$DSPLYMNU_CUSTOMINVERTMAP",			"cl_customizeinvulmap", "OnOff"
+	ColorPicker "$DSPLYMNU_CUSTOMINVERTC1",		"cl_custominvulmapcolor1"
+	ColorPicker "$DSPLYMNU_CUSTOMINVERTC2",		"cl_custominvulmapcolor2"
 	Option "$DSPLYMNU_WIPETYPE",				"wipetype", "Wipes"
 	Option "$DSPLYMNU_DRAWFUZZ",				"r_drawfuzz", "Fuzziness"
 	Option "$DSPLYMNU_OLDTRANS",				"r_vanillatrans", "VanillaTrans"
@@ -1822,34 +1825,6 @@ OptionValue BufferCounts
 	  12, "12"
 }
 
-
-OptionString SoundOutputsWindows
-{
-	"Default",		"$OPTVAL_DEFAULT"
-	"DirectSound",	"$OPTSTR_DIRECTSOUND"
-	"WASAPI",		"$OPTSTR_WASAPI"
-	"ASIO",			"$OPTSTR_ASIO"
-	"WaveOut",		"$OPTSTR_WAVEOUT"
-	"No sound",		"$OPTSTR_NOSOUND"
-}
-
-
-OptionString SoundOutputsUnix
-{
-	"Default",		"$OPTVAL_DEFAULT"
-	"OSS",			"$OPTSTR_OSS"
-	"ALSA",			"$OPTSTR_ALSA"
-	"SDL",			"$OPTSTR_SDL"
-	"ESD",			"$OPTSTR_ESD"
-	"PulseAudio",	"$OPTSTR_PULSEAUDIO"
-	"No sound",		"$OPTSTR_NOSOUND"
-}
-
-OptionString SoundOutputsMac
-{
-	"Core Audio",		"$OPTSTR_COREAUDIO"
-	"No sound",			"$OPTSTR_NOSOUND"
-}
 
 OptionString ALDevices
 {

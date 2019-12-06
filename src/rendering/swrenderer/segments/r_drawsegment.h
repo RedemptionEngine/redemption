@@ -36,7 +36,6 @@ namespace swrenderer
 		void SetRangeUndrawn(int x1, int x2);
 
 		uint8_t silhouette = 0; // 0=none, 1=bottom, 2=top, 3=both
-		bool bFogBoundary = false;
 		int CurrentPortalUniq = 0; // [ZZ] to identify the portal that this drawseg is in. used for sprite clipping.
 		int SubsectorDepth;
 
@@ -52,26 +51,26 @@ namespace swrenderer
 	struct DrawSegment
 	{
 		seg_t *curline;
-		float light, lightstep;
-		short x1, x2; // Same as sx1 and sx2, but clipped to the drawseg
+		short x1, x2;
 
 		FWallCoords WallC;
-		FWallTmapVals tmapvals;
 		ProjectedWallTexcoords texcoords;
 
 		DrawSegmentClipInfo drawsegclip;
 
-		bool Has3DFloorWalls() const { return b3DFloorBoundary != 0; }
-		bool Has3DFloorFrontSectorWalls() const { return (b3DFloorBoundary & 2) == 2; }
-		bool Has3DFloorBackSectorWalls() const { return (b3DFloorBoundary & 1) == 1; }
-		bool Has3DFloorMidTexture() const { return (b3DFloorBoundary & 4) == 4; }
+		bool HasFogBoundary() const { return (flags & 8) != 0; }
+		bool Has3DFloorWalls() const { return (flags & 3) != 0; }
+		bool Has3DFloorFrontSectorWalls() const { return (flags & 2) != 0; }
+		bool Has3DFloorBackSectorWalls() const { return (flags & 1) != 0; }
+		bool HasTranslucentMidTexture() const { return (flags & 4) != 0; }
 
-		void SetHas3DFloorFrontSectorWalls() { b3DFloorBoundary |= 2; }
-		void SetHas3DFloorBackSectorWalls() { b3DFloorBoundary |= 1; }
-		void SetHas3DFloorMidTexture() { b3DFloorBoundary |= 4; }
+		void SetHasFogBoundary() { flags |= 8; }
+		void SetHas3DFloorFrontSectorWalls() { flags |= 2; }
+		void SetHas3DFloorBackSectorWalls() { flags |= 1; }
+		void SetHasTranslucentMidTexture() { flags |= 4; }
 
 	private:
-		uint8_t b3DFloorBoundary = 0; // 1=backsector, 2=frontsector, 4=midtexture
+		int flags = 0; // 1=backsector, 2=frontsector, 4=midtexture, 8=fogboundary
 	};
 
 	struct DrawSegmentGroup
