@@ -335,9 +335,11 @@ void D_GrabCVarDefaults()
 
 	while ((lump = fileSystem.FindLump("DEFCVARS", &lastlump)) != -1)
 	{
+#if 0
 		// don't parse from wads
 		if (lastlump > fileSystem.GetLastEntry(fileSystem.GetMaxIwadNum()))
 			I_FatalError("Cannot load DEFCVARS from a wadfile!\n");
+#endif
 
 		FScanner sc(lump);
 
