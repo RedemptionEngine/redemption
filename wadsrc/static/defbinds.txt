@@ -53,6 +53,14 @@ f12 spynext
 mwheeldown weapnext
 mwheelup weapprev
 
+// WASD keybinds
+w +forward
+s +back
+a +moveleft
+d +moveright
+e +use
+r +reload
+
 // Originally just for Heretic, Hexen, and Strife.
 // I can't see why they shouldn't be for Doom or Chex either.
 pgup +moveup
