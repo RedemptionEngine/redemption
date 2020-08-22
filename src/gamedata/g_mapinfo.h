@@ -249,6 +249,8 @@ enum ELevelFlags : unsigned int
 	LEVEL3_EXITSECRETUSED		= 0x00000040,
 	LEVEL3_FORCEWORLDPANNING	= 0x00000080,	// Forces the world panning flag for all textures, even those without it explicitly set.
 	LEVEL3_HIDEAUTHORNAME		= 0x00000100,
+	LEVEL3_NOSAVEGAME			= 0x00000200,	// Disallow user saves
+	LEVEL3_NOAUTOMAP			= 0x00000400,	// Disallow automap
 };
 
 

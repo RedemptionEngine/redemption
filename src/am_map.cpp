@@ -1544,6 +1544,12 @@ void DAutomap::Ticker ()
 	if (!automapactive)
 		return;
 
+	if ((primaryLevel->flags3 & LEVEL3_NOAUTOMAP) && !(dmflags2 & DF2_YES_AUTOMAP))
+	{
+		AM_ToggleMap();
+		return;
+	}
+
 	amclock++;
 }
 
@@ -3367,6 +3373,10 @@ void AM_ToggleMap()
 
 	// ... or if there is no automap.
 	if (!primaryLevel || !primaryLevel->automap)
+		return;
+
+	// mapinfo noautomap flag
+	if (!automapactive && (primaryLevel->flags3 & LEVEL3_NOAUTOMAP) && !(dmflags2 & DF2_YES_AUTOMAP))
 		return;
 
 	if (!automapactive)

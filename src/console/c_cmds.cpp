@@ -637,12 +637,18 @@ UNSAFE_CCMD (load)
 
 UNSAFE_CCMD (save)
 {
-    if (argv.argc() < 2 || argv.argc() > 3)
+
+	if (!(dmflags2 & DF2_YES_USERSAVE) && (primaryLevel->flags3 & LEVEL3_NOSAVEGAME))
 	{
-        Printf ("usage: save <filename> [description]\n");
-        return;
-    }
-    FString fname = argv[1];
+		Printf("savegame is disabled. use sv_allowsaves to override\n");
+		return;
+	}
+	if (argv.argc() < 2 || argv.argc() > 3)
+	{
+		Printf ("usage: save <filename> [description]\n");
+		return;
+	}
+	FString fname = argv[1];
 	DefaultExtension (fname, "." SAVEGAME_EXT);
 	G_SaveGame (fname, argv.argc() > 2 ? argv[2] : argv[1]);
 }
