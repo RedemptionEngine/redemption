@@ -2675,14 +2675,14 @@ static int GetEpochTime()
 {
 	time_t now;
 	time(&now);
-	return now != (time_t)(-1) ? now + epochoffset : (time_t)(-1);
+	return now != (time_t)(-1) ? int(now + epochoffset) : -1;
 }
 
 //Returns an empty string if the Strf tokens are valid, otherwise returns the problematic token
 static FString CheckStrfString(FString timeForm)
 {
 	// Valid Characters after %
-	const char validSingles[] = { 'a','A','b','B','c','C','d','D','e','F','G','g','h','H','I','j','k','l','m','M','n','p','P','r','R','s','S','t','T','u','U','V','w','W','x','X','y','Y','z','Z' };
+	const char validSingles[] = { 'a','A','b','B','c','C','d','D','e','F','g','G','h','H','I','j','m','M','n','p','r','R','S','t','T','u','U','V','w','W','x','X','y','Y','z','Z' };
 
 	timeForm.Substitute("%%", "%a"); //Prevent %% from causing tokenizing problems
 	timeForm = "a" + timeForm; //Prevent %* at the beginning from causing a false error from tokenizing
@@ -2695,7 +2695,7 @@ static FString CheckStrfString(FString timeForm)
 		if (t.Len() == 0) return FString("%");
 
 		// Single Character
-		for (int i = 0; i < sizeof(validSingles)/sizeof(validSingles[0]); i++)
+		for (size_t i = 0; i < sizeof(validSingles)/sizeof(validSingles[0]); i++)
 		{
 			if (t[0] == validSingles[i])
 			{
