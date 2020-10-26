@@ -47,6 +47,7 @@
 #include "gstrings.h"
 #include "printf.h"
 #include "s_music.h"
+#include "i_interface.h"
 
 
 //==========================================================================
@@ -354,6 +355,18 @@ DEFINE_ACTION_FUNCTION_NATIVE(FFont, GetCursor, GetCursor)
 	ACTION_RETURN_STRING(FString(self->GetCursor()));
 }
 
+static int GetGlyphHeight(FFont* fnt, int code)
+{
+	auto glyph = fnt->GetChar(code, CR_UNTRANSLATED, nullptr);
+	return glyph ? (int)glyph->GetDisplayHeight() : 0;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FFont, GetGlyphHeight, GetGlyphHeight)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FFont);
+	PARAM_INT(code);
+	ACTION_RETURN_INT(GetGlyphHeight(self, code));
+}
 //==========================================================================
 //
 // file system
@@ -624,18 +637,6 @@ DEFINE_ACTION_FUNCTION(DOptionMenuItemCommand, DoCommand)
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(_Console, MidPrint)
-{
-	PARAM_PROLOGUE;
-	PARAM_POINTER(fnt, FFont);
-	PARAM_STRING(text);
-	PARAM_BOOL(bold);
-
-	const char* txt = text[0] == '$' ? GStrings(&text[1]) : text.GetChars();
-	C_MidPrint(fnt, txt, bold);
-	return 0;
-}
-
 DEFINE_ACTION_FUNCTION(_Console, HideConsole)
 {
 	C_HideConsole();
@@ -659,3 +660,5 @@ DEFINE_FIELD_X(MusPlayingInfo, MusPlayingInfo, loop);
 
 DEFINE_GLOBAL_NAMED(PClass::AllClasses, AllClasses)
 DEFINE_GLOBAL(Bindings)
+DEFINE_GLOBAL(AutomapBindings)
+DEFINE_GLOBAL(generic_ui)

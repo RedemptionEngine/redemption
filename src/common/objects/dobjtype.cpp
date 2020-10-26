@@ -246,14 +246,14 @@ void PClass::StaticShutdown ()
 	}
 	FunctionPtrList.Clear();
 	VMFunction::DeleteAll();
+	// From this point onward no scripts may be called anymore because the data needed by the VM is getting deleted now.
+	// This flags DObject::Destroy not to call any scripted OnDestroy methods anymore.
+	bVMOperational = false;
 
 	// Make a full garbage collection here so that all destroyed but uncollected higher level objects 
 	// that still exist are properly taken down before the low level data is deleted.
 	GC::FullGC();
 
-	// From this point onward no scripts may be called anymore because the data needed by the VM is getting deleted now.
-	// This flags DObject::Destroy not to call any scripted OnDestroy methods anymore.
-	bVMOperational = false;
 
 	Namespaces.ReleaseSymbols();
 
@@ -435,7 +435,7 @@ DObject *PClass::CreateNew()
 	else
 		memset (mem, 0, Size);
 
-	if (ConstructNative == nullptr)
+	if (ConstructNative == nullptr || bAbstract)
 	{
 		M_Free(mem);
 		I_Error("Attempt to instantiate abstract class %s.", TypeName.GetChars());

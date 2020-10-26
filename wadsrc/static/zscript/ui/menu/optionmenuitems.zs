@@ -122,7 +122,7 @@ class OptionMenuItemSubmenu : OptionMenuItem
 
 	override bool Activate()
 	{
-		Menu.MenuSound("menu/choose");
+		Menu.MenuSound("menu/advance");
 		Menu.SetMenu(mAction, mParam);
 		return true;
 	}
@@ -1236,40 +1236,63 @@ class OptionMenuItemScaleSlider : OptionMenuItemSlider
 
 //=============================================================================
 //
-// Placeholder classes for overhauled video mode menu. Do not use!
-// Their sole purpose is to support mods with full copy of embedded MENUDEF
+// Flag option by Accensus
 //
 //=============================================================================
 
-class OptionMenuItemScreenResolution : OptionMenuItem
+class OptionMenuItemFlagOption : OptionMenuItemOption
 {
-	String mResTexts[3];
-	int mSelection;
-	int mHighlight;
-	int mMaxValid;
+	int mBitShift;
 
-	enum EValues
+	OptionMenuItemFlagOption Init(String label, Name command, Name values, int bitShift, CVar greycheck = null, int center = 0)
 	{
-		SRL_INDEX = 0x30000,
-		SRL_SELECTION = 0x30003,
-		SRL_HIGHLIGHT = 0x30004,
-	};
+		Super.Init(label, command, values, greycheck, center);
+		mBitShift = bitShift;
 
-	OptionMenuItemScreenResolution Init(String command)
-	{
 		return self;
 	}
 
-	override bool Selectable()
+	override int GetSelection()
 	{
-		return false;
-	}
-}
+		int Selection = 0;
+		int cnt = OptionValues.GetCount(mValues);
+		if (cnt > 0 && mCVar != null)
+		{
+			if (OptionValues.GetTextValue(mValues, 0).Length() == 0)
+			{
+				int CurrentFlags = mCVar.GetInt();
 
-class VideoModeMenu : OptionMenu
-{
-	static bool SetSelectedSize()
+				for (int i = 0; i < cnt; i++)
+				{
+					int OptionValue = int(OptionValues.GetValue(mValues, i));
+					if (CurrentFlags & (OptionValue << mBitShift))
+					{
+						Selection = i;
+						break;
+					}
+				}
+			}
+		}
+		return Selection;
+	}
+
+	override void SetSelection(int Selection)
 	{
-		return false;
+		int cnt = OptionValues.GetCount(mValues);
+		if (cnt > 0 && mCVar != null)
+		{
+			if (OptionValues.GetTextValue(mValues, 0).Length() == 0)
+			{
+				int OptionValue = int(OptionValues.GetValue(mValues, Selection));
+				int CurrentFlags = mCVar.GetInt();
+
+				switch (OptionValue)
+				{
+				case 0: CurrentFlags &= ~(1 << mBitShift); break;
+				case 1: CurrentFlags |= (1 << mBitShift); break;
+				}
+				mCVar.SetInt(CurrentFlags);
+			}
+		}
 	}
 }

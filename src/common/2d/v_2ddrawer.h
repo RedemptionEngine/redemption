@@ -167,8 +167,9 @@ public:
 	bool isIn2D;
 	bool locked;	// prevents clearing of the data so it can be reused multiple times (useful for screen fades)
 	float screenFade = 1.f;
+	DVector2 offset;
 public:
-	int fullscreenautoaspect = 0;
+	int fullscreenautoaspect = 3;
 	int cliptop = -1, clipleft = -1, clipwidth = -1, clipheight = -1;
 	
 	int AddCommand(const RenderCommand *data);
@@ -189,7 +190,7 @@ public:
 	void AddPoly(FGameTexture* img, FVector4 *vt, size_t vtcount, unsigned int *ind, size_t idxcount, int translation, PalEntry color, FRenderStyle style, int clipx1, int clipy1, int clipx2, int clipy2);
 	void FillPolygon(int* rx1, int* ry1, int* xb1, int32_t npoints, int picnum, int palette, int shade, int props, const FVector2& xtex, const FVector2& ytex, const FVector2& otex,
 		int clipx1, int clipy1, int clipx2, int clipy2);
-	void AddFlatFill(int left, int top, int right, int bottom, FGameTexture *src, int local_origin = false, double flatscale = 1.0, PalEntry color = 0xffffffff);
+	void AddFlatFill(int left, int top, int right, int bottom, FGameTexture *src, int local_origin = false, double flatscale = 1.0, PalEntry color = 0xffffffff, ERenderStyle rs = STYLE_Normal);
 
 	void AddColorOnlyQuad(int left, int top, int width, int height, PalEntry color, FRenderStyle *style = nullptr, bool prepend = false);
 	void ClearScreen(PalEntry color = 0xff000000);
@@ -215,6 +216,19 @@ public:
 	void ClearClipRect() { clipleft = cliptop = 0; clipwidth = clipheight = -1; }
 	void SetClipRect(int x, int y, int w, int h);
 	void GetClipRect(int* x, int* y, int* w, int* h);
+
+	DVector2 SetOffset(const DVector2& vec)
+	{
+		auto v = offset;
+		offset = vec;
+		return v;
+	}
+
+	void Set(TwoDVertex* v, double xx, double yy, double zz, double uu, double vv, PalEntry col)
+	{
+		v->Set(xx + offset.X, yy + offset.Y, zz, uu, vv, col);
+	}
+
 
 	int DrawCount() const
 	{

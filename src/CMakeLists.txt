@@ -307,7 +307,7 @@ if( ZD_CMAKE_COMPILER_IS_GNUCXX_COMPATIBLE )
 		set( CMAKE_C_FLAGS "-Wno-unused-result ${CMAKE_C_FLAGS}" )
 		set( CMAKE_CXX_FLAGS "-Wno-unused-result ${CMAKE_CXX_FLAGS}" )
 	endif()
-	if( CMAKE_CXX_COMPILER_ID STREQUAL "Clang" )
+	if( CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
 		if( APPLE OR CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "3.6" )
 			set( CMAKE_CXX_FLAGS "-Wno-inconsistent-missing-override ${CMAKE_CXX_FLAGS}" )
 		endif()
@@ -329,30 +329,6 @@ if( ZD_CMAKE_COMPILER_IS_GNUCXX_COMPATIBLE )
 		set( CMAKE_C_FLAGS "-DNO_SSE ${CMAKE_C_FLAGS}" )
 		set( CMAKE_CXX_FLAGS "-DNO_SSE ${CMAKE_CXX_FLAGS}" )
 	endif()
-
-	# Use the highest C++ standard available since VS2015 compiles with C++14
-	# but we only require C++11.  The recommended way to do this in CMake is to
-	# probably to use target_compile_features, but I don't feel like maintaining
-	# a list of features we use.
-	CHECK_CXX_COMPILER_FLAG( "-std=gnu++14" CAN_DO_CPP14 )
-	if ( CAN_DO_CPP14 )
-		set ( CMAKE_CXX_FLAGS "-std=gnu++14 ${CMAKE_CXX_FLAGS}" )
-	else ()
-		CHECK_CXX_COMPILER_FLAG( "-std=gnu++1y" CAN_DO_CPP1Y )
-		if ( CAN_DO_CPP1Y )
-			set ( CMAKE_CXX_FLAGS "-std=gnu++1y ${CMAKE_CXX_FLAGS}" )
-		else ()
-			CHECK_CXX_COMPILER_FLAG( "-std=gnu++11" CAN_DO_CPP11 )
-			if ( CAN_DO_CPP11 )
-				set ( CMAKE_CXX_FLAGS "-std=gnu++11 ${CMAKE_CXX_FLAGS}" )
-			else ()
-				CHECK_CXX_COMPILER_FLAG( "-std=gnu++0x" CAN_DO_CPP0X )
-				if ( CAN_DO_CPP0X )
-					set ( CMAKE_CXX_FLAGS "-std=gnu++0x ${CMAKE_CXX_FLAGS}" )
-				endif ()
-			endif ()
-		endif ()
-	endif ()
 
 	# Remove extra warnings when using the official DirectX headers.
 	# Also, TDM-GCC 4.4.0 no longer accepts glibc-style printf formats as valid,
@@ -826,7 +802,7 @@ set (PCH_SOURCES
 	playsim/bots/b_think.cpp
 	bbannouncer.cpp
 	console/c_cmds.cpp
-	console/c_console.cpp
+	console/c_notifybuffer.cpp
 	console/c_functions.cpp
 	ct_chat.cpp
 	d_iwad.cpp
@@ -952,15 +928,9 @@ set (PCH_SOURCES
 	maploader/renderinfo.cpp
 	maploader/compatibility.cpp
 	maploader/postprocessor.cpp
-	menu/joystickmenu.cpp
-	menu/menu.cpp
-	menu/messagebox.cpp
-	menu/optionmenu.cpp
-	menu/resolutionmenu.cpp
 	menu/doommenu.cpp
 	menu/loadsavemenu.cpp
 	menu/playermenu.cpp
-	menu/menudef.cpp
 	gamedata/textures/animations.cpp
 	gamedata/textures/anim_switches.cpp
 	gamedata/textures/buildloader.cpp
@@ -1075,6 +1045,10 @@ set (PCH_SOURCES
 	common/console/c_consolebuffer.cpp
 	common/console/c_cvars.cpp
 	common/console/c_dispatch.cpp
+	common/console/c_commandbuffer.cpp
+	common/console/c_console.cpp
+	common/console/c_notifybufferbase.cpp
+	common/console/c_tabcomplete.cpp
 	common/console/c_expr.cpp
 	common/utility/engineerrors.cpp
 	common/utility/i_module.cpp
@@ -1110,6 +1084,7 @@ set (PCH_SOURCES
 	common/filesystem/resourcefile.cpp
 	common/engine/cycler.cpp
 	common/engine/d_event.cpp
+	common/engine/date.cpp
 	common/engine/stats.cpp
 	common/engine/sc_man.cpp
 	common/engine/palettecontainer.cpp
@@ -1124,6 +1099,13 @@ set (PCH_SOURCES
 	common/objects/dobject.cpp
 	common/objects/dobjgc.cpp
 	common/objects/dobjtype.cpp
+	common/menu/joystickmenu.cpp
+	common/menu/menu.cpp
+	common/menu/messagebox.cpp
+	common/menu/optionmenu.cpp
+	common/menu/resolutionmenu.cpp
+	common/menu/menudef.cpp
+	common/menu/savegamemanager.cpp
 	
 	common/rendering/v_framebuffer.cpp
 	common/rendering/v_video.cpp

@@ -350,9 +350,9 @@ void CalcFullscreenScale(DrawParms *parms, double srcwidth, double srcheight, in
 	}
 
 	double aspect;
-	if (srcheight == 200) aspect = srcwidth / 240.;
-	else if (srcheight == 400) aspect = srcwidth / 480;
-	else aspect = srcwidth / srcheight;
+	if (srcheight == 200) srcheight = 240.;
+	else if (srcheight == 400) srcheight = 480;
+	aspect = srcwidth / srcheight;
 	rect.left = rect.top = 0;
 	auto screenratio = ActiveRatio(GetWidth(), GetHeight());
 	if (autoaspect == FSMode_ScaleToFit43 || autoaspect == FSMode_ScaleToFit43Top || autoaspect == FSMode_ScaleToFit43Bottom)
@@ -366,7 +366,7 @@ void CalcFullscreenScale(DrawParms *parms, double srcwidth, double srcheight, in
 			double width4_3 = srcheight * (4. / 3.);
 			rect.width = (double)GetWidth() * srcwidth / width4_3;
 			rect.height = GetHeight() * screenratio * (3. / 4.);	// use 4:3 for the image
-			rect.left = -(srcwidth - width4_3) / 2;
+			rect.left = (double)GetWidth() * (-(srcwidth - width4_3) / 2) / width4_3;
 			switch (oautoaspect)
 			{
 			default:
@@ -408,6 +408,14 @@ void CalcFullscreenScale(DrawParms *parms, double srcwidth, double srcheight, in
 			break;
 		}
 	}
+}
+
+void GetFullscreenRect(double width, double height, int fsmode, DoubleRect* rect)
+{
+	DrawParms parms;
+	parms.viewport.width = twod->GetWidth();
+	parms.viewport.height = twod->GetHeight();
+	CalcFullscreenScale(&parms, width, height, fsmode, *rect);
 }
 
 DEFINE_ACTION_FUNCTION(_Screen, GetFullscreenRect)
@@ -703,6 +711,7 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 	parms->rotateangle = 0;
 	parms->flipoffsets = false;
 	parms->indexed = false;
+	parms->nooffset = false;
 
 	// Parse the tag list for attributes. (For floating point attributes,
 	// consider that the C ABI dictates that all floats be promoted to
@@ -912,6 +921,10 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 
 		case DTA_FlipOffsets:
 			parms->flipoffsets = ListGetInt(tags);
+			break;
+
+		case DTA_NoOffset:
+			parms->nooffset = ListGetInt(tags);
 			break;
 
 		case DTA_SrcX:
@@ -1529,9 +1542,30 @@ void DrawFrame(F2DDrawer* twod, PalEntry color, int left, int top, int width, in
 	twod->AddColorOnlyQuad(right, top - offset, offset, height + 2 * offset, color);
 }
 
+DEFINE_ACTION_FUNCTION(_Screen, DrawLineFrame)
+{
+	PARAM_PROLOGUE;
+	PARAM_COLOR(color);
+	PARAM_INT(left);
+	PARAM_INT(top);
+	PARAM_INT(width);
+	PARAM_INT(height);
+	PARAM_INT(thickness);
+	DrawFrame(twod, color, left, top, width, height, thickness);
+	return 0;
+}
+
 void V_CalcCleanFacs(int designwidth, int designheight, int realwidth, int realheight, int* cleanx, int* cleany, int* _cx1, int* _cx2)
 {
 	if (designheight < 240 && realheight >= 480) designheight = 240;
 	*cleanx = *cleany = std::min(realwidth / designwidth, realheight / designheight);
 }
 
+
+DEFINE_ACTION_FUNCTION(_Screen, SetOffset)
+{
+	PARAM_PROLOGUE;
+	PARAM_FLOAT(x);
+	PARAM_FLOAT(y);
+	ACTION_RETURN_VEC2(twod->SetOffset(DVector2(x, y)));
+}

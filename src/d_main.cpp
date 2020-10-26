@@ -151,6 +151,7 @@ void P_Shutdown();
 void M_SaveDefaultsFinal();
 void R_Shutdown();
 void I_ShutdownInput();
+void SetConsoleNotifyBuffer();
 
 const FIWADInfo *D_FindIWAD(TArray<FString> &wadfiles, const char *iwad, const char *basewad);
 
@@ -634,6 +635,7 @@ CVAR (Flag, sv_killbossmonst,		dmflags2, DF2_KILLBOSSMONST);
 CVAR (Flag, sv_nocountendmonst,		dmflags2, DF2_NOCOUNTENDMONST);
 CVAR (Flag, sv_respawnsuper,		dmflags2, DF2_RESPAWN_SUPER);
 CVAR (Flag, sv_nothingspawn,		dmflags2, DF2_NO_COOP_THING_SPAWN);
+CVAR (Flag, sv_alwaysspawnmulti,	dmflags2, DF2_ALWAYS_SPAWN_MULTI);
 CVAR (Flag, sv_allowautomap,		dmflags2, DF2_YES_AUTOMAP);
 CVAR (Flag, sv_allowsaves,		dmflags2, DF2_YES_USERSAVE);
 CVAR (Mask, sv_automap,                        dmflags2, DF2_NO_AUTOMAP|DF2_YES_AUTOMAP);
@@ -1085,6 +1087,7 @@ void D_Display ()
 		switch (gamestate)
 		{
 			case GS_FULLCONSOLE:
+				D_PageDrawer();
 				C_DrawConsole ();
 				M_Drawer ();
 				End2DAndUpdate ();
@@ -2836,6 +2839,13 @@ FString System_GetPlayerName(int node)
 {
 	return players[node].userinfo.GetName();
 }
+
+void System_ConsoleToggled(int state)
+{
+	if (state == c_falling && hud_toggled)
+		D_ToggleHud();
+}
+
 //==========================================================================
 //
 // DoomSpecificInfo
@@ -2969,32 +2979,16 @@ static void CheckForHacks(BuildInfo& buildinfo)
 	}
 }
 
-static void FixUnityStatusBar()
+static void FixWideStatusBar()
 {
-	if (gameinfo.flags & GI_FIXUNITYSBAR)
+	FGameTexture* sbartex = TexMan.FindGameTexture("stbar", ETextureType::MiscPatch);
+
+	// only adjust offsets if none already exist and if the texture is not scaled. For scaled textures a proper offset is needed.
+	if (sbartex && sbartex->GetTexelWidth() > 320 && sbartex->GetScaleX() == 1 &&
+		!sbartex->GetTexelLeftOffset(0) && !sbartex->GetTexelTopOffset(0))
 	{
-		FGameTexture* sbartex = TexMan.FindGameTexture("stbar", ETextureType::MiscPatch);
-
-		// texture not found, we're not here to operate on a non-existent texture so just exit
-		if (!sbartex)
-			return;
-
-		// where is this texture located? if it's not in an iwad, then exit
-		int lumpnum = sbartex->GetSourceLump();
-		if (lumpnum >= 0 && lumpnum < fileSystem.GetNumEntries())
-		{
-			int wadno = fileSystem.GetFileContainer(lumpnum);
-			if (!(wadno >= fileSystem.GetIwadNum() && wadno <= fileSystem.GetMaxIwadNum()))
-				return;
-		}
-
-		// only adjust offsets if none already exist
-		if (sbartex->GetTexelWidth() > 320 &&
-			!sbartex->GetTexelLeftOffset(0) && !sbartex->GetTexelTopOffset(0))
-		{
-			sbartex->SetOffsets(0, (sbartex->GetTexelWidth() - 320) / 2, 0);
-			sbartex->SetOffsets(1, (sbartex->GetTexelWidth() - 320) / 2, 0);
-		}
+		sbartex->SetOffsets(0, (sbartex->GetTexelWidth() - 320) / 2, 0);
+		sbartex->SetOffsets(1, (sbartex->GetTexelWidth() - 320) / 2, 0);
 	}
 }
 
@@ -3030,6 +3024,9 @@ static void GC_MarkGameRoots()
 	// NextToThink must not be freed while thinkers are ticking.
 	GC::Mark(NextToThink);
 }
+
+bool  CheckSkipGameOptionBlock(const char* str);
+
 //==========================================================================
 //
 // D_DoomMain
@@ -3055,13 +3052,6 @@ static int D_DoomMain_Internal (void)
 	buttonMap.GetButton(Button_Mlook)->bReleaseLock = true;
 	buttonMap.GetButton(Button_Klook)->bReleaseLock = true;
 
-	static StringtableCallbacks stblcb =
-	{
-		StrTable_ValidFilter,
-		StrTable_GetGender
-	};
-	GStrings.SetCallbacks(&stblcb);
-
 	sysCallbacks = {
 		System_WantGuiCapture,
 		System_WantLeftButton,
@@ -3078,6 +3068,11 @@ static int D_DoomMain_Internal (void)
 		System_M_Dim,
 		System_GetPlayerName,
 		System_DispatchEvent,
+		StrTable_ValidFilter,
+		StrTable_GetGender,
+		nullptr,
+		CheckSkipGameOptionBlock,
+		System_ConsoleToggled,
 	};
 
 	
@@ -3150,16 +3145,6 @@ static int D_DoomMain_Internal (void)
 	GameConfig->DoAutoloadSetup(iwad_man);
 
 	// reinit from here
-
-	ConsoleCallbacks cb = {
-		D_UserInfoChanged,
-		D_SendServerInfoChange,
-		D_SendServerFlagChange,
-		G_GetUserCVar,
-		[]() { return gamestate != GS_FULLCONSOLE && gamestate != GS_STARTUP; }
-	};
-
-	C_InstallHandlers(&cb);
 
 	do
 	{
@@ -3387,9 +3372,9 @@ static int D_DoomMain_Internal (void)
 		TexMan.Init([]() { StartScreen->Progress(); }, CheckForHacks);
 		PatchTextures();
 		TexAnim.Init();
-		C_InitConback();
+		C_InitConback(TexMan.CheckForTexture(gameinfo.BorderFlat, ETextureType::Flat), true, 0.25);
 
-		FixUnityStatusBar();
+		FixWideStatusBar();
 
 		StartScreen->Progress();
 		V_InitFonts();
@@ -3456,6 +3441,7 @@ static int D_DoomMain_Internal (void)
 		FinishDehPatch();
 
 		if (!batchrun) Printf("M_Init: Init menus.\n");
+		SetDefaultMenuColors();
 		M_Init();
 		M_CreateGameMenus();
 
@@ -3647,6 +3633,18 @@ int GameMain()
 {
 	int ret = 0;
 	GameTicRate = TICRATE;
+
+	ConsoleCallbacks cb = {
+		D_UserInfoChanged,
+		D_SendServerInfoChange,
+		D_SendServerFlagChange,
+		G_GetUserCVar,
+		[]() { return gamestate != GS_FULLCONSOLE && gamestate != GS_STARTUP; }
+	};
+
+	C_InstallHandlers(&cb);
+	SetConsoleNotifyBuffer();
+
 	try
 	{
 		ret = D_DoomMain_Internal();
