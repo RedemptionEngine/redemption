@@ -64,6 +64,7 @@
 #include "gameconfigfile.h"
 #include "d_player.h"
 #include "teaminfo.h"
+#include "g_levellocals.h"
 
 EXTERN_CVAR(Int, cl_gfxlocalization)
 EXTERN_CVAR(Bool, m_quickexit)
@@ -174,6 +175,11 @@ bool M_SetSpecialMenu(FName& menu, int param)
 		{
 			// cannot save outside the game.
 			M_StartMessage (GStrings("SAVEDEAD"), 1);
+			return false;
+		}
+		if (!(dmflags2 & DF2_YES_USERSAVE) && (primaryLevel->flags3 & LEVEL3_NOSAVEGAME))
+		{
+			M_StartMessage (GStrings("SAVEBLOCKED"), 1);
 			return false;
 		}
 		break;
@@ -385,6 +391,9 @@ CCMD (quicksave)
 		S_Sound (CHAN_VOICE, CHANF_UI, "menu/invalid", snd_menuvolume, ATTN_NONE);
 		return;
 	}
+
+	if (!(dmflags2 & DF2_YES_USERSAVE) && (primaryLevel->flags3 & LEVEL3_NOSAVEGAME))
+		return;
 
 	if (gamestate != GS_LEVEL)
 		return;

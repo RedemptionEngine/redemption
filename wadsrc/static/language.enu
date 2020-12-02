@@ -1,0 +1,3 @@
+[enu default]
+SAVEBLOCKED = "You cannot save the game at this time!\n\npress a key.";
+GMPLYMNU_ALWAYSALLOWSAVES	= "Always allow saving";

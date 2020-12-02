@@ -1,0 +1,4 @@
+version 220
+gl_texture_filter 0
+freelook 1
+vid_fullscreen 0
