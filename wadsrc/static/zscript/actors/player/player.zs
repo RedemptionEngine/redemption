@@ -2674,8 +2674,8 @@ struct PlayerInfo native play	// self is what internally is known as player_t
 	native int killcount;
 	native int itemcount;
 	native int secretcount;
-	native int damagecount;
-	native int bonuscount;
+	native uint damagecount;
+	native uint bonuscount;
 	native int hazardcount;
 	native int hazardinterval;
 	native Name hazardtype;

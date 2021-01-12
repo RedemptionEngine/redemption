@@ -79,6 +79,11 @@ gameinfo
 	normsidemove = 0x18, 0x28
 }
 
+gamedefaults
+{
+	enableskyboxao
+}
+
 spawnnums
 {
 	1 = ShotgunGuy

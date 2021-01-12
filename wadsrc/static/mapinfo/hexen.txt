@@ -512,6 +512,7 @@ gamedefaults
 	noautosequences
 	missilesactivateimpactlines
 	monsterfallingdamage
+	enableskyboxao
 }
 
 // There is also support for showing a clus5msg after cluster 5, but

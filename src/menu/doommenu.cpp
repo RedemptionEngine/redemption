@@ -177,7 +177,7 @@ bool M_SetSpecialMenu(FName& menu, int param)
 			M_StartMessage (GStrings("SAVEDEAD"), 1);
 			return false;
 		}
-		if (!(dmflags2 & DF2_YES_USERSAVE) && (primaryLevel->flags3 & LEVEL3_NOSAVEGAME))
+		if (!(dmflagsr & DFR_YES_USERSAVE) && (primaryLevel->flagsr & LEVELR_NOSAVEGAME))
 		{
 			M_StartMessage (GStrings("SAVEBLOCKED"), 1);
 			return false;
@@ -392,7 +392,7 @@ CCMD (quicksave)
 		return;
 	}
 
-	if (!(dmflags2 & DF2_YES_USERSAVE) && (primaryLevel->flags3 & LEVEL3_NOSAVEGAME))
+	if (!(dmflagsr & DFR_YES_USERSAVE) && (primaryLevel->flagsr & LEVELR_NOSAVEGAME))
 		return;
 
 	if (gamestate != GS_LEVEL)

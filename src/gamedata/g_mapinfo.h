@@ -251,8 +251,11 @@ enum ELevelFlags : unsigned int
 	LEVEL3_FORCEWORLDPANNING	= 0x00000080,	// Forces the world panning flag for all textures, even those without it explicitly set.
 	LEVEL3_HIDEAUTHORNAME		= 0x00000100,
 	LEVEL3_PROPERMONSTERFALLINGDAMAGE	= 0x00000200,	// Properly apply falling damage to the monsters
-	LEVEL3_NOSAVEGAME			= 0x00000400,	// Disallow user saves
-	LEVEL3_NOAUTOMAP			= 0x00000800,	// Disallow automap
+	LEVEL3_SKYBOXAO				= 0x00000400,	// Apply SSAO to sector skies
+
+	// these are redemption specific
+	LEVELR_NOSAVEGAME			= 0x00000001,	// Disallow user saves
+	LEVELR_NOAUTOMAP			= 0x00000002,	// Disallow automap
 };
 
 
@@ -325,6 +328,8 @@ struct level_info_t
 	int32_t		flags;
 	uint32_t	flags2;
 	uint32_t	flags3;
+
+	uint32_t	flagsr;
 
 	FString		Music;
 	FString		LevelName;

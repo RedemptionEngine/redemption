@@ -63,6 +63,11 @@ gameinfo
 	messageboxclass = "MessageBoxMenu"
 }
 
+gamedefaults
+{
+	enableskyboxao
+}
+
 DoomEdNums
 {
   4001 = "$Player5Start"

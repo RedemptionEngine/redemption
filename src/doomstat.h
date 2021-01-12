@@ -236,6 +236,8 @@ EXTERN_CVAR (Int, infighting)
 EXTERN_CVAR (Int, dmflags);
 EXTERN_CVAR (Int, dmflags2);	// [BC]
 
+EXTERN_CVAR (Int, dmflagsr);
+
 EXTERN_CVAR (Int, compatflags);
 EXTERN_CVAR (Int, compatflags2);
 

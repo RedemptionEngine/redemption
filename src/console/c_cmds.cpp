@@ -636,7 +636,7 @@ UNSAFE_CCMD (load)
 UNSAFE_CCMD (save)
 {
 
-	if (!(dmflags2 & DF2_YES_USERSAVE) && (primaryLevel->flags3 & LEVEL3_NOSAVEGAME))
+	if (!(dmflagsr & DFR_YES_USERSAVE) && (primaryLevel->flagsr & LEVELR_NOSAVEGAME))
 	{
 		Printf("savegame is disabled. use sv_allowsaves to override\n");
 		return;

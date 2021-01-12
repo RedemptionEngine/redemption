@@ -1560,6 +1560,9 @@ enum EMIType
 	MITYPE_SETFLAG3,
 	MITYPE_CLRFLAG3,
 	MITYPE_SCFLAGS3,
+	MITYPE_SETFLAGR,
+	MITYPE_CLRFLAGR,
+	MITYPE_SCFLAGSR,
 	MITYPE_COMPATFLAG,
 };
 
@@ -1653,10 +1656,14 @@ MapFlagHandlers[] =
 	{ "nocoloredspritelighting",		MITYPE_SETFLAG3,	LEVEL3_NOCOLOREDSPRITELIGHTING, 0 },
 	{ "forceworldpanning",				MITYPE_SETFLAG3,	LEVEL3_FORCEWORLDPANNING, 0 },
 	{ "propermonsterfallingdamage",			MITYPE_SETFLAG3,	LEVEL3_PROPERMONSTERFALLINGDAMAGE, 0 },
-	{ "noautomap",						MITYPE_SETFLAG3,	LEVEL3_NOAUTOMAP, 0 },
-	{ "allowautomap",					MITYPE_CLRFLAG3,	LEVEL3_NOAUTOMAP, 0 },
-	{ "nousersave",						MITYPE_SETFLAG3,	LEVEL3_NOSAVEGAME, 0 },
-	{ "allowusersave",					MITYPE_CLRFLAG3,	LEVEL3_NOSAVEGAME, 0 },
+	{ "enableskyboxao",				MITYPE_SETFLAG3,	LEVEL3_SKYBOXAO, 0 },
+	{ "disableskyboxao",				MITYPE_CLRFLAG3,	LEVEL3_SKYBOXAO, 0 },
+
+	// these are redemption specific
+	{ "noautomap",						MITYPE_SETFLAGR,	LEVELR_NOAUTOMAP, 0 },
+	{ "allowautomap",					MITYPE_CLRFLAGR,	LEVELR_NOAUTOMAP, 0 },
+	{ "nousersave",						MITYPE_SETFLAGR,	LEVELR_NOSAVEGAME, 0 },
+	{ "allowusersave",					MITYPE_CLRFLAGR,	LEVELR_NOSAVEGAME, 0 },
 	{ "nobotnodes",						MITYPE_IGNORE,	0, 0 },		// Skulltag option: nobotnodes
 	{ "compat_shorttex",				MITYPE_COMPATFLAG, COMPATF_SHORTTEX, 0 },
 	{ "compat_stairs",					MITYPE_COMPATFLAG, COMPATF_STAIRINDEX, 0 },
@@ -1802,6 +1809,29 @@ void FMapInfoParser::ParseMapDefinition(level_info_t &info)
 
 			case MITYPE_SCFLAGS3:
 				info.flags3 = (info.flags3 & handler->data2) | handler->data1;
+				break;
+
+			case MITYPE_SETFLAGR:
+				if (!CheckAssign())
+				{
+					info.flagsr |= handler->data1;
+				}
+				else
+				{
+					sc.MustGetNumber();
+					if (sc.Number) info.flagsr |= handler->data1;
+					else info.flagsr &= ~handler->data1;
+				}
+				info.flagsr |= handler->data2;
+				break;
+
+			case MITYPE_CLRFLAGR:
+				info.flagsr &= ~handler->data1;
+				info.flagsr |= handler->data2;
+				break;
+
+			case MITYPE_SCFLAGSR:
+				info.flagsr = (info.flagsr & handler->data2) | handler->data1;
 				break;
 
 			case MITYPE_COMPATFLAG:

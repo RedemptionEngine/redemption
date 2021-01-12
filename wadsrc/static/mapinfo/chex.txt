@@ -78,6 +78,11 @@ gameinfo
 	normsidemove = 0x18, 0x28
 }
 
+gamedefaults
+{
+	enableskyboxao
+}
+
 DoomEdNums
 {
      5 = ChexBlueCard

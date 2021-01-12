@@ -612,6 +612,7 @@ gamedefaults
 	nointermission
 	clipmidtextures
 	noinfighting
+	enableskyboxao
 }
 
 map MAP01 LOOKUP "TXT_STRIFE_MAP01"
