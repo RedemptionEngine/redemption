@@ -482,6 +482,7 @@ enum ESkillProperty
 	SKILLP_Infight,
 	SKILLP_PlayerRespawn,
 	SKILLP_SpawnMulti,
+	SKILLP_InstantReaction,
 };
 enum EFSkillProperty	// floating point properties
 {
@@ -526,6 +527,7 @@ struct FSkillInfo
 	double Aggressiveness;
 	int SpawnFilter;
 	bool SpawnMulti;
+	bool InstantReaction;
 	int ACSReturn;
 	FString MenuName;
 	FString PicName;
