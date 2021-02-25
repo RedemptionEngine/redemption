@@ -3214,7 +3214,8 @@ static int D_DoomMain_Internal (void)
 		// Process automatically executed files
 		FExecList *exec;
 		FArgs *execFiles = new FArgs;
-		GameConfig->AddAutoexec(execFiles, gameinfo.ConfigName);
+		if (!(Args->CheckParm("-noautoexec")))
+			GameConfig->AddAutoexec(execFiles, gameinfo.ConfigName);
 		exec = D_MultiExec(execFiles, NULL);
 		delete execFiles;
 
