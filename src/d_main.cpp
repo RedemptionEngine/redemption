@@ -200,7 +200,7 @@ const char* iwad_folders[13] = { "flats/", "textures/", "hires/", "sprites/", "v
 const char* iwad_reserved[12] = { "mapinfo", "zmapinfo", "gameinfo", "sndinfo", "sbarinfo", "menudef", "gldefs", "animdefs", "decorate", "zscript", "iwadinfo", "maps/" };
 
 
-CUSTOM_CVAR(Float, i_timescale, 1.0f, CVAR_NOINITCALL)
+CUSTOM_CVAR(Float, i_timescale, 1.0f, CVAR_NOINITCALL | CVAR_VIRTUAL)
 {
 	if (netgame)
 	{
@@ -3164,6 +3164,19 @@ static int D_DoomMain_Internal (void)
 
 	// Now that we have the IWADINFO, initialize the autoload ini sections.
 	GameConfig->DoAutoloadSetup(iwad_man);
+
+	// Prevent the game from starting if the savegame passed to -loadgame is invalid
+	v = Args->CheckValue("-loadgame");
+	if (v)
+	{
+		FString file(v);
+		FixPathSeperator(file);
+		DefaultExtension(file, "." SAVEGAME_EXT);
+		if (!FileExists(file))
+		{
+			I_FatalError("Cannot find savegame %s", file.GetChars());
+		}
+	}
 
 	// reinit from here
 
