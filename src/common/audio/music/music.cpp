@@ -82,8 +82,11 @@ static MusicCallbacks mus_cb = { nullptr, DefaultOpenMusic };
 
 // PUBLIC DATA DEFINITIONS -------------------------------------------------
 EXTERN_CVAR(Int, snd_mididevice)
+EXTERN_CVAR(Float, mod_dumb_mastervolume)
+EXTERN_CVAR(Float, fluid_gain)
 
-CVAR(Bool, mus_calcgain, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // changing this will only take effect for the next song.
+
+CVAR(Bool, mus_calcgain, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // changing this will only take effect for the next song.
 CVAR(Bool, mus_usereplaygain, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // changing this will only take effect for the next song.
 CUSTOM_CVAR(Float, mus_gainoffset, 0.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // for customizing the base volume
 {
@@ -99,6 +102,11 @@ void S_SetMusicCallbacks(MusicCallbacks* cb)
 	if (mus_cb.OpenMusic == nullptr) mus_cb.OpenMusic = DefaultOpenMusic;	// without this we are dead in the water.
 }
 
+int MusicEnabled() // int return is for scripting
+{
+	return mus_enabled && !nomusic;
+} 
+
 //==========================================================================
 //
 // 
@@ -107,13 +115,18 @@ void S_SetMusicCallbacks(MusicCallbacks* cb)
 //==========================================================================
 
 static std::unique_ptr<SoundStream> musicStream;
+static TArray<SoundStream*> customStreams;
 
 SoundStream *S_CreateCustomStream(size_t size, int samplerate, int numchannels, StreamCallback cb, void *userdata)
 {
 	int flags = 0;
 	if (numchannels < 2) flags |= SoundStream::Mono;
 	auto stream = GSnd->CreateStream(cb, int(size), flags, samplerate, userdata);
-	if (stream) stream->Play(true, 1);
+	if (stream)
+	{
+		stream->Play(true, 1);
+		customStreams.Push(stream);
+	}
 	return stream;
 }
 
@@ -122,11 +135,23 @@ void S_StopCustomStream(SoundStream *stream)
 	if (stream)
 	{
 		stream->Stop();
+		auto f = customStreams.Find(stream);
+		if (f < customStreams.Size()) customStreams.Delete(f);
 		delete stream;
 	}
-
 }
 
+void S_PauseAllCustomStreams(bool on)
+{
+	static bool paused = false;
+
+	if (paused == on) return;
+	paused = on;
+	for (auto s : customStreams)
+	{
+		s->SetPaused(on);
+	}
+}
 
 static TArray<int16_t> convert;
 static bool FillStream(SoundStream* stream, void* buff, int len, void* userdata)
@@ -214,6 +239,9 @@ static bool S_StartMusicPlaying(ZMusic_MusicStream song, bool loop, float rel_vo
 		I_SetRelativeVolume(saved_relative_volume * factor);
 	}
 	ZMusic_Stop(song);
+	// make sure the volume modifiers update properly in case replay gain settings have changed.
+	fluid_gain.Callback();
+	mod_dumb_mastervolume.Callback();
 	if (!ZMusic_Start(song, subsong, loop))
 	{
 		return false;
@@ -488,6 +516,8 @@ static void CheckReplayGain(const char *musicname, EMidiDevice playertype, const
 {
 	mus_playing.replayGain = 0.f;
 	mus_playing.replayGainFactor = dBToAmplitude(mus_gainoffset);
+	fluid_gain.Callback();
+	mod_dumb_mastervolume.Callback();
 	if (!mus_usereplaygain) return;
 
 	FileReader reader = mus_cb.OpenMusic(musicname);
@@ -588,23 +618,26 @@ static void CheckReplayGain(const char *musicname, EMidiDevice playertype, const
 	ZMusic_Close(handle);
 
 	GainAnalyzer analyzer;
-	analyzer.InitGainAnalysis(fmt.mSampleRate);
-	int result = analyzer.AnalyzeSamples(lbuffer.Data(), rbuffer.Size() == 0 ? nullptr : rbuffer.Data(), lbuffer.Size(), rbuffer.Size() == 0? 1: 2);
+	int result = analyzer.InitGainAnalysis(fmt.mSampleRate);
 	if (result == GAIN_ANALYSIS_OK)
 	{
-		auto gain = analyzer.GetTitleGain();
-		Printf("Calculated replay gain for %s at %f dB\n", hash.GetChars(), gain);
+		result = analyzer.AnalyzeSamples(lbuffer.Data(), rbuffer.Size() == 0 ? nullptr : rbuffer.Data(), lbuffer.Size(), rbuffer.Size() == 0 ? 1 : 2);
+		if (result == GAIN_ANALYSIS_OK)
+		{
+			auto gain = analyzer.GetTitleGain();
+			Printf("Calculated replay gain for %s at %f dB\n", hash.GetChars(), gain);
 
-		gainMap.Insert(hash, gain);
-		mus_playing.replayGain = gain;
-		mus_playing.replayGainFactor = dBToAmplitude(mus_playing.replayGain + mus_gainoffset);
-		SaveGains();
+			gainMap.Insert(hash, gain);
+			mus_playing.replayGain = gain;
+			mus_playing.replayGainFactor = dBToAmplitude(mus_playing.replayGain + mus_gainoffset);
+			SaveGains();
+		}
 	}
 }
 
 bool S_ChangeMusic(const char* musicname, int order, bool looping, bool force)
 {
-	if (nomusic) return false;	// skip the entire procedure if music is globally disabled.
+	if (!MusicEnabled()) return false;	// skip the entire procedure if music is globally disabled.
 
 	if (!force && PlayList.GetNumSongs())
 	{ // Don't change if a playlist is active
@@ -826,7 +859,7 @@ void S_StopMusic (bool force)
 
 CCMD (changemus)
 {
-	if (!nomusic)
+	if (MusicEnabled())
 	{
 		if (argv.argc() > 1)
 		{

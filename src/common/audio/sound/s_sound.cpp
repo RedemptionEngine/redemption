@@ -43,7 +43,14 @@
 #include "s_music.h"
 #include "m_random.h"
 #include "printf.h"
+#include "c_cvars.h"
 
+CVARD(Bool, snd_enabled, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG, "enables/disables sound effects")
+
+int SoundEnabled()
+{
+	return snd_enabled && !nosound && !nosfx;
+}
 
 enum
 {
@@ -382,7 +389,7 @@ FSoundChan *SoundEngine::StartSound(int type, const void *source,
 	FVector3 pos, vel;
 	FRolloffInfo *rolloff;
 
-	if (sound_id <= 0 || volume <= 0 || nosfx || nosound || blockNewSounds)
+	if (sound_id <= 0 || volume <= 0 || nosfx || !SoundEnabled() || blockNewSounds)
 		return NULL;
 
 	// prevent crashes.
@@ -528,7 +535,7 @@ FSoundChan *SoundEngine::StartSound(int type, const void *source,
 
 	// sound is paused and a non-looped sound is being started.
 	// Such a sound would play right after unpausing which wouldn't sound right.
-	if (!(chanflags & CHANF_LOOP) && !(chanflags & (CHANF_UI|CHANF_NOPAUSE)) && SoundPaused)
+	if (!(chanflags & CHANF_LOOP) && !(chanflags & (CHANF_UI|CHANF_NOPAUSE|CHANF_FORCE)) && SoundPaused)
 	{
 		return NULL;
 	}
@@ -929,12 +936,7 @@ void SoundEngine::StopSound(int sourcetype, const void* actor, int channel, int 
 void SoundEngine::StopActorSounds(int sourcetype, const void* actor, int chanmin, int chanmax)
 {
 	const bool all = (chanmin == 0 && chanmax == 0);
-	if (!all && chanmax > chanmin)
-	{
-		const int temp = chanmax;
-		chanmax = chanmin;
-		chanmin = temp;
-	}
+	if (chanmax < chanmin) std::swap(chanmin, chanmax);
 
 	FSoundChan* chan = Channels;
 	while (chan != nullptr)

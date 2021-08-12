@@ -80,6 +80,7 @@ class PlayerPawn : Actor
 	flagdef NoThrustWhenInvul: PlayerFlags, 0;
 	flagdef CanSuperMorph: PlayerFlags, 1;
 	flagdef CrouchableMorph: PlayerFlags, 2;
+	flagdef WeaponLevel2Ended: PlayerFlags, 3;
 	
 	Default
 	{
@@ -137,6 +138,21 @@ class PlayerPawn : Actor
 		else
 		{
 			if (health > 0) Height = FullHeight;
+		}
+
+		if (bWeaponLevel2Ended)
+		{
+			bWeaponLevel2Ended = false;
+			if (player.ReadyWeapon != NULL && player.ReadyWeapon.bPowered_Up)
+			{
+				player.ReadyWeapon.EndPowerup ();
+			}
+			if (player.PendingWeapon != NULL && player.PendingWeapon != WP_NOCHANGE &&
+				player.PendingWeapon.bPowered_Up &&
+				player.PendingWeapon.SisterWeapon != NULL)
+			{
+				player.PendingWeapon = player.PendingWeapon.SisterWeapon;
+			}
 		}
 		Super.Tick();
 	}
@@ -317,8 +333,8 @@ class PlayerPawn : Actor
 			(player.ReadyWeapon == NULL || player.ReadyWeapon.bWimpy_Weapon))
 		{
 			let best = BestWeapon (ammotype);
-			if (best != NULL && (player.ReadyWeapon == NULL ||
-				best.SelectionOrder < player.ReadyWeapon.SelectionOrder))
+			if (best != NULL && !best.bNoAutoSwitchTo && 
+				(player.ReadyWeapon == NULL || best.SelectionOrder < player.ReadyWeapon.SelectionOrder))
 			{
 				player.PendingWeapon = best;
 			}

@@ -117,6 +117,7 @@
 #include "texturemanager.h"
 #include "hw_clock.h"
 #include "hwrenderer/scene/hw_drawinfo.h"
+#include "doomfont.h"
 
 #ifdef __unix__
 #include "i_system.h"  // for SHARE_DIR
@@ -315,6 +316,7 @@ FStartupInfo GameStartupInfo;
 FString lastIWAD;
 int restart = 0;
 bool AppActive = true;
+bool playedtitlemusic;
 
 cycle_t FrameCycles;
 
@@ -908,6 +910,7 @@ static void End2DAndUpdate()
 	twod->End();
 	CheckBench();
 	screen->Update();
+	twod->OnFrameDone();
 }
 
 //==========================================================================
@@ -1580,7 +1583,8 @@ void D_DoAdvanceDemo (void)
 		gamestate = GS_DEMOSCREEN;
 		pagename = gameinfo.TitlePage;
 		pagetic = (int)(gameinfo.titleTime * TICRATE);
-		S_ChangeMusic (gameinfo.titleMusic, gameinfo.titleOrder, false);
+		if (!playedtitlemusic) S_ChangeMusic (gameinfo.titleMusic, gameinfo.titleOrder, false);
+		playedtitlemusic = true;
 		demosequence = 3;
 		pagecount = 0;
 		C_HideConsole ();
@@ -1613,6 +1617,7 @@ void D_DoAdvanceDemo (void)
 
 void D_StartTitle (void)
 {
+	playedtitlemusic = false;
 	gameaction = ga_nothing;
 	demosequence = -1;
 	D_AdvanceDemo ();
@@ -2124,8 +2129,8 @@ static void AddAutoloadFiles(const char *autoname)
 		// Add common (global) wads
 		D_AddConfigFiles(allwads, "Global.Autoload", "*.wad", GameConfig);
 
-		long len;
-		int lastpos = -1;
+		ptrdiff_t len;
+		ptrdiff_t lastpos = -1;
 
 		while ((len = LumpFilterIWAD.IndexOf('.', lastpos+1)) > 0)
 		{
@@ -3046,6 +3051,11 @@ static void GC_MarkGameRoots()
 	GC::Mark(NextToThink);
 }
 
+static void System_ToggleFullConsole()
+{
+	gameaction = ga_fullconsole;
+}
+
 bool  CheckSkipGameOptionBlock(const char* str);
 
 //==========================================================================
@@ -3094,6 +3104,10 @@ static int D_DoomMain_Internal (void)
 		nullptr,
 		CheckSkipGameOptionBlock,
 		System_ConsoleToggled,
+		nullptr, 
+		nullptr,
+		System_ToggleFullConsole,
+		nullptr,
 	};
 
 	
@@ -3413,6 +3427,7 @@ static int D_DoomMain_Internal (void)
 
 		StartScreen->Progress();
 		V_InitFonts();
+		InitDoomFonts();
 		V_LoadTranslations();
 		UpdateGenericUI(false);
 
@@ -3738,7 +3753,6 @@ void D_Cleanup()
 	FreeSBarInfoScript();
 	
 	// clean up game state
-	ST_Clear();
 	D_ErrorCleanup ();
 	P_Shutdown();
 	

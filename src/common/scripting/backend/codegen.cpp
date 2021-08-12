@@ -932,7 +932,7 @@ FxExpression *FxIntCast::Resolve(FCompileContext &ctx)
 		{
 			ExpVal constval = static_cast<FxConstant *>(basex)->GetValue();
 			FxExpression *x = new FxConstant(constval.GetInt(), ScriptPosition);
-			if (constval.GetInt() != constval.GetFloat())
+			if (constval.GetInt() != constval.GetFloat() && !Explicit)
 			{
 				ScriptPosition.Message(MSG_WARNING, "Truncation of floating point constant %f", constval.GetFloat());
 			}
@@ -1449,7 +1449,7 @@ FxFontCast::FxFontCast(FxExpression *x)
 	: FxExpression(EFX_FontCast, x->ScriptPosition)
 {
 	basex = x;
-	ValueType = TypeSound;
+	ValueType = TypeFont;
 }
 
 //==========================================================================
@@ -2170,7 +2170,6 @@ FxExpression *FxPreIncrDecr::Resolve(FCompileContext &ctx)
 ExpEmit FxPreIncrDecr::Emit(VMFunctionBuilder *build)
 {
 	assert(Token == TK_Incr || Token == TK_Decr);
-	assert(ValueType == Base->ValueType && IsNumeric());
 
 	int zero = build->GetConstantInt(0);
 	int regtype = ValueType->GetRegType();
@@ -2257,7 +2256,6 @@ FxExpression *FxPostIncrDecr::Resolve(FCompileContext &ctx)
 ExpEmit FxPostIncrDecr::Emit(VMFunctionBuilder *build)
 {
 	assert(Token == TK_Incr || Token == TK_Decr);
-	assert(ValueType == Base->ValueType && IsNumeric());
 
 	int zero = build->GetConstantInt(0);
 	int regtype = ValueType->GetRegType();
@@ -5261,7 +5259,6 @@ FxExpression *FxMinMax::Resolve(FCompileContext &ctx)
 				else
 				{
 					ExpVal value = static_cast<FxConstant *>(choices[j])->GetValue();
-					assert(value.Type == ValueType);
 					if (Type == NAME_Min)
 					{
 						if (value.Type->GetRegType() == REGT_FLOAT)
@@ -8706,7 +8703,7 @@ FxExpression *FxVMFunctionCall::Resolve(FCompileContext& ctx)
 				bool writable;
 				ArgList[i] = ArgList[i]->Resolve(ctx);	// must be resolved before the address is requested.
 
-				if (ArgList[i]->ValueType->isRealPointer())
+				if (ArgList[i] && ArgList[i]->ValueType->isRealPointer())
 				{
 					auto pointedType = ArgList[i]->ValueType->toPointer()->PointedType;
 					if (pointedType && pointedType->isDynArray())
@@ -9826,14 +9823,14 @@ FxExpression *FxIfStatement::Resolve(FCompileContext &ctx)
 {
 	CHECKRESOLVED();
 
+	SAFE_RESOLVE(Condition, ctx);
+
 	if (WhenTrue == nullptr && WhenFalse == nullptr)
 	{ // We don't do anything either way, so disappear
 		delete this;
 		ScriptPosition.Message(MSG_WARNING, "empty if statement");
 		return new FxNop(ScriptPosition);
 	}
-
-	SAFE_RESOLVE(Condition, ctx);
 
 	if (Condition->ValueType != TypeBool)
 	{

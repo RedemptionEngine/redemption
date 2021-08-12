@@ -22,6 +22,8 @@
 
 #include "volk/volk.h"
 
+#include <inttypes.h>
+
 #include "v_video.h"
 #include "m_png.h"
 #include "templates.h"
@@ -390,7 +392,7 @@ void VulkanFrameBuffer::PrecacheMaterial(FMaterial *mat, int translation)
 
 IHardwareTexture *VulkanFrameBuffer::CreateHardwareTexture(int numchannels)
 {
-	return new VkHardwareTexture();
+	return new VkHardwareTexture(numchannels);
 }
 
 FMaterial* VulkanFrameBuffer::CreateMaterial(FGameTexture* tex, int scaleflags)
@@ -698,7 +700,7 @@ void VulkanFrameBuffer::PrintStartupLog()
 	const auto &limits = props.limits;
 	Printf("Max. texture size: %d\n", limits.maxImageDimension2D);
 	Printf("Max. uniform buffer range: %d\n", limits.maxUniformBufferRange);
-	Printf("Min. uniform buffer offset alignment: %llu\n", limits.minUniformBufferOffsetAlignment);
+	Printf("Min. uniform buffer offset alignment: %" PRIu64 "\n", limits.minUniformBufferOffsetAlignment);
 }
 
 void VulkanFrameBuffer::CreateFanToTrisIndexBuffer()

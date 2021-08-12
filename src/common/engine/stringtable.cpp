@@ -435,7 +435,7 @@ void FStringTable::InsertString(int lumpnum, int langid, FName label, const FStr
 {
 	const char *strlangid = (const char *)&langid;
 	TableElement te = { fileSystem.GetFileContainer(lumpnum), { string, string, string, string } };
-	long index;
+	ptrdiff_t index;
 	while ((index = te.strings[0].IndexOf("@[")) >= 0)
 	{
 		auto endindex = te.strings[0].IndexOf(']', index);
@@ -513,6 +513,26 @@ size_t FStringTable::ProcessEscapes (char *iptr)
 				c = '\r';
 			else if (c == 't')
 				c = '\t';
+			else if (c == 'x')
+			{
+				c = 0;
+				for (int i = 0; i < 2; i++)
+				{
+					char cc = *iptr++;
+					if (cc >= '0' && cc <= '9')
+						c = (c << 4) + cc - '0';
+					else if (cc >= 'a' && cc <= 'f')
+						c = (c << 4) + 10 + cc - 'a';
+					else if (cc >= 'A' && cc <= 'F')
+						c = (c << 4) + 10 + cc - 'A';
+					else
+					{
+						iptr--;
+						break;
+					}
+				}
+				if (c == 0) continue;
+			}
 			else if (c == '\n')
 				continue;
 		}

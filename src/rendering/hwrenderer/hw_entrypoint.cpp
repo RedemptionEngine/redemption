@@ -40,6 +40,7 @@
 #include "flatvertices.h"
 #include "v_palette.h"
 #include "d_main.h"
+#include "g_cvars.h"
 
 #include "hw_lightbuffer.h"
 #include "hw_cvars.h"
@@ -107,13 +108,19 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 
 	R_SetupFrame(mainvp, r_viewwindow, camera);
 
-	if (mainview && toscreen)
+	if (mainview && toscreen && !(camera->Level->flags3 & LEVEL3_NOSHADOWMAP) && camera->Level->HasDynamicLights && gl_light_shadowmap && (screen->hwcaps & RFL_SHADER_STORAGE_BUFFER))
 	{
 		screen->SetAABBTree(camera->Level->aabbTree);
 		screen->mShadowMap.SetCollectLights([=] {
 			CollectLights(camera->Level);
 		});
 		screen->UpdateShadowMap();
+	}
+	else
+	{
+		// null all references to the level if we do not need a shadowmap. This will shortcut all internal calculations without further checks.
+		screen->SetAABBTree(nullptr);
+		screen->mShadowMap.SetCollectLights(nullptr);
 	}
 
 	// Update the attenuation flag of all light defaults for each viewpoint.
@@ -291,7 +298,7 @@ static void CheckTimer(FRenderState &state, uint64_t ShaderStartTime)
 	// if firstFrame is not yet initialized, initialize it to current time
 	// if we're going to overflow a float (after ~4.6 hours, or 24 bits), re-init to regain precision
 	if ((state.firstFrame == 0) || (screen->FrameTime - state.firstFrame >= 1 << 24) || ShaderStartTime >= state.firstFrame)
-		state.firstFrame = screen->FrameTime;
+		state.firstFrame = screen->FrameTime - 1;
 }
 
 

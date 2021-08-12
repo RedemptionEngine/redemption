@@ -122,7 +122,7 @@ static bool IsWadInFolder(const FResourceFile* const archive, const char* const 
 	return 0 == filePath.CompareNoCase(resPath);
 }
 
-void FResourceLump::CheckEmbedded()
+void FResourceLump::CheckEmbedded(LumpFilterInfo* lfi)
 {
 	// Checks for embedded archives
 	const char *c = strstr(FullName, ".wad");
@@ -130,22 +130,13 @@ void FResourceLump::CheckEmbedded()
 	{
 		Flags |= LUMPF_EMBEDDED;
 	}
-	/* later
-	else
+	else if (lfi) for (auto& fstr : lfi->embeddings)
 	{
-		if (c==NULL) c = strstr(Name, ".zip");
-		if (c==NULL) c = strstr(Name, ".pk3");
-		if (c==NULL) c = strstr(Name, ".7z");
-		if (c==NULL) c = strstr(Name, ".pak");
-		if (c && strlen(c) <= 4)
+		if (!stricmp(FullName, fstr))
 		{
-			// Mark all embedded archives in any directory
 			Flags |= LUMPF_EMBEDDED;
-			memset(Name, 0, 8);
 		}
 	}
-	*/
-
 }
 
 
@@ -357,8 +348,8 @@ void FResourceFile::PostProcessArchive(void *lumps, size_t lumpsize, LumpFilterI
 	uint32_t max = NumLumps;
 	max -= FilterLumpsByGameType(filter, lumps, lumpsize, max);
 
-	long len;
-	int lastpos = -1;
+	ptrdiff_t len;
+	ptrdiff_t lastpos = -1;
 	FString file;
 	FString LumpFilter = filter->dotFilter;
 	while ((len = LumpFilter.IndexOf('.', lastpos+1)) > 0)

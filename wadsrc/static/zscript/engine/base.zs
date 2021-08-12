@@ -76,11 +76,14 @@ enum EGameState
 	GS_INTERMISSION,
 	GS_FINALE,
 	GS_DEMOSCREEN,
+	GS_FULLCONSOLE,		// [RH]	Fullscreen console
+	GS_HIDECONSOLE,		// [RH] The menu just did something that should hide fs console
+	GS_STARTUP,			// [RH] Console is fullscreen, and game is just starting
+	GS_TITLELEVEL,		// [RH] A combination of GS_LEVEL and GS_DEMOSCREEN
+	GS_INTRO,
+	GS_CUTSCENE,
+
 	GS_MENUSCREEN = GS_DEMOSCREEN,
-	GS_FULLCONSOLE,
-	GS_HIDECONSOLE,
-	GS_STARTUP,
-	GS_TITLELEVEL,
 }
 
 const TEXTCOLOR_BRICK			= "\034A";
@@ -182,11 +185,33 @@ struct _ native	// These are the global variables, the struct is only here to av
 	native readonly double NotifyFontScale;
 }
 
+struct System native
+{
+	native static void StopMusic();
+	native static void StopAllSounds();
+	native static bool SoundEnabled();
+	native static bool MusicEnabled();
+	native static double GetTimeFrac();
+	
+	static bool specialKeyEvent(InputEvent ev)
+	{
+		if (ev.type == InputEvent.Type_KeyDown || ev.type == InputEvent.Type_KeyUp)
+		{
+			int key = ev.KeyScan;
+			if (key == InputEvent.KEY_VOLUMEDOWN || key == InputEvent.KEY_VOLUMEUP || (key > InputEvent.KEY_LASTJOYBUTTON && key < InputEvent.KEY_PAD_LTHUMB_RIGHT)) return true;
+		}
+		return false;
+	}
+	 	
+}
+
 struct MusPlayingInfo native
 {
 	native String name;
 	native int baseorder;
 	native bool loop;
+	native voidptr handle;
+	
 };
 
 struct TexMan
@@ -218,7 +243,9 @@ struct TexMan
 		AllowSkins = 8,
 		ShortNameOnly = 16,
 		DontCreate = 32,
-		Localize = 64
+		Localize = 64,
+		ForceLookup = 128,
+		NoAlias = 256
 	};
 	
 	enum ETexReplaceFlags
@@ -239,6 +266,7 @@ struct TexMan
 	native static Vector2 GetScaledOffset(TextureID tex);
 	native static int CheckRealHeight(TextureID tex);
 	native static bool OkForLocalization(TextureID patch, String textSubstitute);
+	native static bool UseGamePalette(TextureID tex);
 }
 
 enum EScaleMode
@@ -402,6 +430,8 @@ struct Screen native
 	native static int, int, int, int GetViewWindow();
 	native static double, double, double, double GetFullscreenRect(double vwidth, double vheight, int fsmode);
 	native static Vector2 SetOffset(double x, double y);
+	native static void ClearScreen(color col = 0);
+	native static void SetScreenFade(double factor);
 }
 
 struct Font native
@@ -488,6 +518,7 @@ struct Font native
 	native static Font GetFont(Name fontname);
 	native BrokenLines BreakLines(String text, int maxlen);
 	native int GetGlyphHeight(int code);
+	native int GetDefaultKerning();
 }
 
 struct Console native
@@ -657,6 +688,8 @@ struct StringStruct native
 	native void DeleteLastCharacter();
 	native int CodePointCount() const;
 	native int, int GetNextCodePoint(int position) const;
+	native void Substitute(String str, String replace);
+	native void StripRight(String junk = "");
 }
 
 struct Translation version("2.4")

@@ -80,6 +80,7 @@ class Weapon : StateProvider
 	flagdef NoDeathDeselect: WeaponFlags, 16;	// Don't jump to the Deselect state when the player dies
 	flagdef NoDeathInput: WeaponFlags, 17;		// The weapon cannot be fired/reloaded/whatever when the player is dead
 	flagdef CheatNotWeapon: WeaponFlags, 18;	// Give cheat considers this not a weapon (used by Sigil)
+	flagdef NoAutoSwitchTo : WeaponFlags, 19;	// do not auto switch to this weapon ever!
 
 	// no-op flags
 	flagdef NoLMS: none, 0;
@@ -848,9 +849,10 @@ class Weapon : StateProvider
 			{
 				if (player.PendingWeapon == NULL ||	player.PendingWeapon == WP_NOCHANGE)
 				{
-					player.PendingWeapon = SisterWeapon;
+					player.refire = 0;
+					player.ReadyWeapon = SisterWeapon;
+					player.SetPsprite(PSP_WEAPON, SisterWeapon.GetReadyState());
 				}
-				player.WeaponState |= WF_REFIRESWITCHOK;
 			}
 			else
 			{
@@ -866,9 +868,10 @@ class Weapon : StateProvider
 					if (player.PendingWeapon == NULL || player.PendingWeapon == WP_NOCHANGE)
 					{
 						// Something went wrong. Initiate a regular weapon change.
-						player.PendingWeapon = SisterWeapon;
+						player.refire = 0;
+						player.ReadyWeapon = SisterWeapon;
+						player.SetPsprite(PSP_WEAPON, SisterWeapon.GetReadyState());
 					}
-					player.WeaponState |= WF_REFIRESWITCHOK;
 				}
 			}
 		}

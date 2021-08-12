@@ -63,12 +63,14 @@ struct FileSystem::LumpRecord
 	int			rfnum;
 	int			Namespace;
 	int			resourceId;
+	int			flags;
 
 	void SetFromLump(int filenum, FResourceLump* lmp)
 	{
 		lump = lmp;
 		rfnum = filenum;
 		linkedTexture = nullptr;
+		flags = 0;
 
 		if (lump->Flags & LUMPF_SHORTNAME)
 		{
@@ -76,14 +78,14 @@ struct FileSystem::LumpRecord
 			shortName.String[8] = 0;
 			longName = "";
 			Namespace = lump->GetNamespace();
-			resourceId = 0;
+			resourceId = -1;
 		}
 		else if ((lump->Flags & LUMPF_EMBEDDED) || !lump->getName() || !*lump->getName())
 		{
 			shortName.qword = 0;
 			longName = "";
 			Namespace = ns_hidden;
-			resourceId = 0;
+			resourceId = -1;
 		}
 		else
 		{
@@ -111,7 +113,20 @@ struct FileSystem::LumpRecord
 			if (Namespace == ns_hidden) shortName.qword = 0;
 			else
 			{
-				long slash = longName.LastIndexOf('/');
+				ptrdiff_t encodedResID = longName.LastIndexOf(".{");
+				if (resourceId == -1 && encodedResID >= 0)
+				{
+					const char* p = longName.GetChars() + encodedResID;
+					char* q;
+					int id = (int)strtoull(p+2, &q, 10);	// only decimal numbers allowed here.
+					if (q[0] == '}' && (q[1] == '.' || q[1] == 0))
+					{
+						FString toDelete(p, q - p + 1);
+						longName.Substitute(toDelete, "");
+						resourceId = id;
+					}
+				}
+				ptrdiff_t slash = longName.LastIndexOf('/');
 				FString base = (slash >= 0) ? longName.Mid(slash + 1) : longName;
 				auto dot = base.LastIndexOf('.');
 				if (dot >= 0) base.Truncate(dot);
@@ -487,7 +502,7 @@ int FileSystem::CheckNumForName (const char *name, int space)
 			// from a Zip return that. WADs don't know these namespaces and single lumps must
 			// work as well.
 			if (space > ns_specialzipdirectory && lump.Namespace == ns_global && 
-				!(lump.lump->Flags & LUMPF_FULLPATH)) break;
+				!((lump.lump->Flags ^lump.flags) & LUMPF_FULLPATH)) break;
 		}
 		i = NextLumpIndex[i];
 	}
@@ -633,7 +648,7 @@ int FileSystem::GetNumForFullName (const char *name)
 //
 // FindFile
 //
-// Looks up a file by name, either eith or without path and extension
+// Looks up a file by name, either with or without path and extension
 //
 //==========================================================================
 
@@ -796,7 +811,7 @@ int FileSystem::GetFileFlags (int lump)
 		return 0;
 	}
 
-	return FileInfo[lump].lump->Flags;
+	return FileInfo[lump].lump->Flags ^ FileInfo[lump].flags;
 }
 
 //==========================================================================
@@ -1531,12 +1546,19 @@ bool FileSystem::CreatePathlessCopy(const char *name, int id, int /*flags*/)
 	if (lump < 0) return false;		// Does not exist.
 
 	auto oldlump = FileInfo[lump];
-	int slash = oldlump.longName.LastIndexOf('/');
-	if (slash == -1) return true;	// already is pathless.
+	ptrdiff_t slash = oldlump.longName.LastIndexOf('/');
+
+	if (slash == -1)
+	{
+		FileInfo[lump].flags = LUMPF_FULLPATH;
+		return true;	// already is pathless.
+	}
+
 
 	// just create a new reference to the original data with a different name.
 	oldlump.longName = oldlump.longName.Mid(slash + 1);
 	oldlump.resourceId = id;
+	oldlump.flags = LUMPF_FULLPATH;
 	FileInfo.Push(oldlump);
 	return true;
 }

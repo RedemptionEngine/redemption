@@ -11,9 +11,11 @@ class FileReader;
 class SoundStream;
 
 
+int MusicEnabled();
 typedef bool(*StreamCallback)(SoundStream* stream, void* buff, int len, void* userdata);
 SoundStream *S_CreateCustomStream(size_t size, int samplerate, int numchannels, StreamCallback cb, void *userdata);
 void S_StopCustomStream(SoundStream* stream);
+void S_PauseAllCustomStreams(bool on);
 
 struct MusicCallbacks
 {

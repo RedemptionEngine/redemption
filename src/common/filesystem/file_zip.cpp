@@ -208,8 +208,9 @@ bool FZipFile::Open(bool quiet, LumpFilterInfo* filter)
 	char *dirptr = (char*)directory;
 	FZipLump *lump_p = Lumps;
 
-	FString name0;
+	FString name0, name1;
 	bool foundspeciallump = false;
+	bool foundprefix = false;
 
 	// Check if all files have the same prefix so that this can be stripped out.
 	// This will only be done if there is either a MAPINFO, ZMAPINFO or GAMEINFO lump in the subdirectory, denoting a ZDoom mod.
@@ -233,30 +234,42 @@ bool FZipFile::Open(bool quiet, LumpFilterInfo* filter)
 		}
 
 		name.ToLower();
-		if (i == 0)
+		if (name.IndexOf("filter/") == 0)
+			continue; // 'filter' is a reserved name of the file system.
+		if (name.IndexOf("__macosx") == 0) 
+			continue; // skip Apple garbage. At this stage only the root folder matters.
+		if (!foundprefix)
 		{
 			// check for special names, if one of these gets found this must be treated as a normal zip.
 			bool isspecial = name.IndexOf("/") < 0 || (filter && filter->reservedFolders.Find(name) < filter->reservedFolders.Size());
 			if (isspecial) break;
-			name0 = name;
+			name0 = name.Left(name.LastIndexOf("/")+1);
+			name1 = name.Left(name.IndexOf("/") + 1);
+			foundprefix = true;
 		}
-		else
+
+		if (name.IndexOf(name0) != 0)
 		{
-			if (name.IndexOf(name0) != 0)
+			if (name1.IsNotEmpty())
 			{
-				name0 = "";
-				break;
+				name0 = name1;
+				if (name.IndexOf(name0) != 0)
+				{
+					name0 = "";
+				}
 			}
-			else if (!foundspeciallump && filter)
-			{
-				// at least one of the more common definition lumps must be present.
-				for (auto &p : filter->requiredPrefixes)
-				{ 
-					if (name.IndexOf(name0 + p) == 0)
-					{
-						foundspeciallump = true;
-						break;
-					}
+			if (name0.IsEmpty()) 
+				break;
+		}
+		if (!foundspeciallump && filter)
+		{
+			// at least one of the more common definition lumps must be present.
+			for (auto &p : filter->requiredPrefixes)
+			{ 
+				if (name.IndexOf(name0 + p) == 0 || name.LastIndexOf(p) == name.Len() - strlen(p))
+				{
+					foundspeciallump = true;
+					break;
 				}
 			}
 		}
@@ -272,7 +285,6 @@ bool FZipFile::Open(bool quiet, LumpFilterInfo* filter)
 
 		int len = LittleShort(zip_fh->NameLength);
 		FString name(dirptr + sizeof(FZipCentralDirectoryInfo), len);
-		if (name0.IsNotEmpty()) name = name.Mid(name0.Len());
 		dirptr += sizeof(FZipCentralDirectoryInfo) + 
 				  LittleShort(zip_fh->NameLength) + 
 				  LittleShort(zip_fh->ExtraLength) + 
@@ -284,7 +296,14 @@ bool FZipFile::Open(bool quiet, LumpFilterInfo* filter)
 			if (!quiet) Printf(TEXTCOLOR_RED "\n%s: Central directory corrupted.", FileName.GetChars());
 			return false;
 		}
-		
+
+		if (name.IndexOf("__macosx") == 0 || name.IndexOf("__MACOSX") == 0)
+		{
+			skipped++;
+			continue; // Weed out Apple's resource fork garbage right here because it interferes with safe operation.
+		}
+		if (name0.IsNotEmpty()) name = name.Mid(name0.Len());
+
 		// skip Directories
 		if (name.IsEmpty() || (name.Back() == '/' && LittleLong(zip_fh->UncompressedSize) == 0))
 		{
@@ -329,7 +348,7 @@ bool FZipFile::Open(bool quiet, LumpFilterInfo* filter)
 		lump_p->CRC32 = zip_fh->CRC32;
 		lump_p->CompressedSize = LittleLong(zip_fh->CompressedSize);
 		lump_p->Position = LittleLong(zip_fh->LocalHeaderOffset);
-		lump_p->CheckEmbedded();
+		lump_p->CheckEmbedded(filter);
 
 		lump_p++;
 	}

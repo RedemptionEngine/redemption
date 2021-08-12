@@ -54,7 +54,6 @@ void AddLightAssociation(const char *actor, const char *frame, const char *light
 void InitializeActorLights(TArray<FLightAssociation> &LightAssociations);
 void ParseColorization(FScanner& sc);
 
-TArray<UserShaderDesc> usershaders;
 extern TDeletingArray<FLightDefaults *> LightDefaults;
 extern int AttenuationIsSet;
 
@@ -1156,7 +1155,7 @@ class GLDefsParser
 			if (lumpnum != -1)
 			{
 				if (iwad && fileSystem.GetFileContainer(lumpnum) <= fileSystem.GetMaxIwadNum()) useme = true;
-				if (thiswad && fileSystem.GetFileContainer(lumpnum) == workingLump) useme = true;
+				if (thiswad && fileSystem.GetFileContainer(lumpnum) == fileSystem.GetFileContainer(workingLump)) useme = true;
 			}
 			if (!useme) return;
 		}
@@ -1338,7 +1337,7 @@ class GLDefsParser
 			if (lumpnum != -1)
 			{
 				if (iwad && fileSystem.GetFileContainer(lumpnum) <= fileSystem.GetMaxIwadNum()) useme = true;
-				if (thiswad && fileSystem.GetFileContainer(lumpnum) == workingLump) useme = true;
+				if (thiswad && fileSystem.GetFileContainer(lumpnum) == fileSystem.GetFileContainer(workingLump)) useme = true;
 			}
 			if (!useme) return;
 		}

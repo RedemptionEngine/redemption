@@ -761,7 +761,7 @@ public:
 					ReadUserKey(ukey);
 					loader->MapThingsUserData.Push(ukey);
 				}
-				else
+				else if (stricmp("comment", key.GetChars()))
 				{
 					DPrintf(DMSG_WARNING, "Unknown UDMF thing key %s\n", key.GetChars());
 				}
@@ -928,6 +928,12 @@ public:
 				Flag(ld->flags, ML_BLOCK_FLOATERS, key); 
 				continue;
 
+			case NAME_Blocklandmonsters:
+				// This is from MBF21 so it may later be needed for a lower level namespace.
+				CHECK_N(St | Zd | Zdt | Va)
+				Flag(ld->flags2, ML2_BLOCKLANDMONSTERS, key);
+				continue;
+
 			case NAME_Translucent:
 				CHECK_N(St | Zd | Zdt | Va)
 				strifetrans = CheckBool(key); 
@@ -944,6 +950,8 @@ public:
 				continue;
 
 			default:
+				if (!stricmp("comment", key.GetChars()))
+					continue;
 				break;
 			}
 
@@ -1115,7 +1123,8 @@ public:
 				break;
 
 			default:
-				DPrintf(DMSG_WARNING, "Unknown UDMF linedef key %s\n", key.GetChars());
+				if (strnicmp("user_", key.GetChars(), 5))
+					DPrintf(DMSG_WARNING, "Unknown UDMF linedef key %s\n", key.GetChars());
 				break;
 			}
 
@@ -1229,6 +1238,8 @@ public:
 				continue;
 
 			default:
+				if (!stricmp("comment", key.GetChars()))
+					continue;
 				break;
 			}
 
@@ -1430,7 +1441,8 @@ public:
 				break;
 
 			default:
-				DPrintf(DMSG_WARNING, "Unknown UDMF sidedef key %s\n", key.GetChars());
+				if (strnicmp("user_", key.GetChars(), 5))
+					DPrintf(DMSG_WARNING, "Unknown UDMF sidedef key %s\n", key.GetChars());
 				break;
 
 			}
@@ -1547,6 +1559,8 @@ public:
 				continue;
 
 			default:
+				if (!stricmp("comment", key.GetChars()))
+					continue;
 				break;
 			}
 
@@ -1935,7 +1949,8 @@ public:
 					break;
 					
 				default:
-					DPrintf(DMSG_WARNING, "Unknown UDMF sector key %s\n", key.GetChars());
+					if (strnicmp("user_", key.GetChars(), 5))
+						DPrintf(DMSG_WARNING, "Unknown UDMF sector key %s\n", key.GetChars());
 					break;
 			}
 			if ((namespace_bits & (Zd | Zdt)) && !strnicmp("user_", key.GetChars(), 5))

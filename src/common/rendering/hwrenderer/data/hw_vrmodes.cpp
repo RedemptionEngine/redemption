@@ -33,10 +33,10 @@
 #include "i_interface.h"
 
 // Set up 3D-specific console variables:
-CVAR(Int, vr_mode, 0, CVAR_GLOBALCONFIG)
+CVAR(Int, vr_mode, 0, CVAR_GLOBALCONFIG|CVAR_ARCHIVE)
 
 // switch left and right eye views
-CVAR(Bool, vr_swap_eyes, false, CVAR_GLOBALCONFIG)
+CVAR(Bool, vr_swap_eyes, false, CVAR_GLOBALCONFIG | CVAR_ARCHIVE)
 
 // intraocular distance in meters
 CVAR(Float, vr_ipd, 0.062f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG) // METERS
@@ -60,7 +60,6 @@ static VRMode vrmi_checker = { 2, isqrt2, isqrt2, 1.f,{ { -.5f, 1.f },{ .5f, 1.f
 
 const VRMode *VRMode::GetVRMode(bool toscreen)
 {
-#ifdef VR3D_ENABLED
 	int mode = !toscreen || (sysCallbacks.DisableTextureFilter && sysCallbacks.DisableTextureFilter()) ? 0 : vr_mode;
 
 	switch (mode)
@@ -96,9 +95,6 @@ const VRMode *VRMode::GetVRMode(bool toscreen)
 	case VR_CHECKERINTERLEAVED:
 		return &vrmi_checker;
 	}
-#else
-	return &vrmi_mono;
-#endif
 }
 
 void VRMode::AdjustViewport(DFrameBuffer *screen) const

@@ -262,9 +262,15 @@ class Actor : Thinker native
 	meta int ExplosionDamage;
 	meta int MeleeDamage;
 	meta Sound MeleeSound;
+	meta Sound RipSound;
 	meta double MissileHeight;
 	meta Name MissileName;
 	meta double FastSpeed;		// speed in fast mode
+
+	// todo: implement access to native meta properties.
+	// native meta int infighting_group;
+	// native meta int projectile_group;
+	// native meta int splash_group;
 
 	Property prefix: none;
 	Property Obituary: Obituary;
@@ -335,6 +341,7 @@ class Actor : Thinker native
 	property Ripperlevel: RipperLevel;
 	property RipLevelMin: RipLevelMin;
 	property RipLevelMax: RipLevelMax;
+	property RipSound: RipSound;
 	property RenderHidden: RenderHidden;
 	property RenderRequired: RenderRequired;
 	property FriendlySeeBlocks: FriendlySeeBlocks;
@@ -398,6 +405,7 @@ class Actor : Thinker native
 		RipperLevel 0;
 		RipLevelMin 0;
 		RipLevelMax 0;
+		RipSound "misc/ripslop";
 		DefThreshold 100;
 		BloodType "Blood", "BloodSplatter", "AxeBlood";
 		ExplosionDamage 128;
@@ -674,10 +682,11 @@ class Actor : Thinker native
 	native Actor SpawnSubMissile(Class<Actor> type, Actor target);
 	native Actor, Actor SpawnPlayerMissile(class<Actor> type, double angle = 1e37, double x = 0, double y = 0, double z = 0, out FTranslatedLineTarget pLineTarget = null, bool nofreeaim = false, bool noautoaim = false, int aimflags = 0);
 	native void SpawnTeleportFog(Vector3 pos, bool beforeTele, bool setTarget);
-	native Actor RoughMonsterSearch(int distance, bool onlyseekable = false, bool frontonly = false);
+	native Actor RoughMonsterSearch(int distance, bool onlyseekable = false, bool frontonly = false, double fov = 0);
 	native int ApplyDamageFactor(Name damagetype, int damage);
 	native int GetModifiedDamage(Name damagetype, int damage, bool passive, Actor inflictor = null, Actor source = null, int flags = 0);
 	native bool CheckBossDeath();
+	native bool CheckFov(Actor target, double fov);
 
 	void A_Light(int extralight) { if (player) player.extralight = clamp(extralight, -20, 20); }
 	void A_Light0() { if (player) player.extralight = 0; }
@@ -698,7 +707,7 @@ class Actor : Thinker native
 	native void TraceBleedAngle(int damage, double angle, double pitch);
 
 	native void SetIdle(bool nofunction = false);
-	native bool CheckMeleeRange();
+	native bool CheckMeleeRange(double range = -1);
 	native bool TriggerPainChance(Name mod, bool forcedPain = false);
 	native virtual int DamageMobj(Actor inflictor, Actor source, int damage, Name mod, int flags = 0, double angle = 0);
 	native void PoisonMobj (Actor inflictor, Actor source, int damage, int duration, int period, Name type);
@@ -751,6 +760,7 @@ class Actor : Thinker native
 	native clearscope vector2 Vec2Angle(double length, double angle, bool absolute = false) const;
 	native clearscope vector2 Vec2Offset(double x, double y, bool absolute = false) const;
 	native clearscope vector3 Vec2OffsetZ(double x, double y, double atz, bool absolute = false) const;
+	native double PitchFromVel();
 	native void VelIntercept(Actor targ, double speed = -1, bool aimpitch = true, bool oldvel = false, bool resetvel = false);
 	native void VelFromAngle(double speed = 1e37, double angle = 1e37);
 	native void Vel3DFromAngle(double speed, double angle, double pitch);
@@ -821,7 +831,7 @@ class Actor : Thinker native
 	native clearscope int GetSpawnHealth() const;
 	native double GetCrouchFactor(int ptr = AAPTR_PLAYER1);
 	native double GetCVar(string cvar);
-	native double GetCVarString(string cvar);
+	native string GetCVarString(string cvar);
 	native int GetPlayerInput(int inputnum, int ptr = AAPTR_DEFAULT);
 	native int CountProximity(class<Actor> classname, double distance, int flags = 0, int ptr = AAPTR_DEFAULT);
 	native int GetMissileDamage(int mask, int add, int ptr = AAPTR_DEFAULT);
@@ -1053,7 +1063,7 @@ class Actor : Thinker native
 	native void A_Look();
 	native void A_Chase(statelabel melee = '_a_chase_default', statelabel missile = '_a_chase_default', int flags = 0);
 	native void A_VileChase();
-	native bool A_CheckForResurrection();
+	native bool A_CheckForResurrection(State state = null, Sound snd = 0);
 	native void A_BossDeath();
 	bool A_CallSpecial(int special, int arg1=0, int arg2=0, int arg3=0, int arg4=0, int arg5=0)
 	{
@@ -1073,7 +1083,7 @@ class Actor : Thinker native
 	native clearscope void A_StartSound(sound whattoplay, int slot = CHAN_BODY, int flags = 0, double volume = 1.0, double attenuation = ATTN_NORM, double pitch = 0.0, double startTime = 0.0);
 	native void A_SoundVolume(int slot, double volume);
 	native void A_SoundPitch(int slot, double pitch);
-	deprecated("2.3", "Use A_StartSound(<sound>, CHAN_WEAPON) instead") void A_PlayWeaponSound(sound whattoplay) { A_StartSound(whattoplay, CHAN_WEAPON); }
+	deprecated("2.3", "Use A_StartSound(<sound>, CHAN_WEAPON) instead") void A_PlayWeaponSound(sound whattoplay, bool fullvol = false) { A_StartSound(whattoplay, CHAN_WEAPON, 0, 1, fullvol? ATTN_NONE : ATTN_NORM); }
 	native void A_StopSound(int slot = CHAN_VOICE);	// Bad default but that's what is originally was...
 	void A_StopAllSounds()	{	A_StopSounds(0,0);	}
 	native void A_StopSounds(int chanmin, int chanmax);
@@ -1101,6 +1111,14 @@ class Actor : Thinker native
 	native void A_SetBlend(color color1, double alpha, int tics, color color2 = 0, double alpha2 = 0.);
 	deprecated("2.3", "Use 'b<FlagName> = [true/false]' instead") native void A_ChangeFlag(string flagname, bool value);
 	native void A_ChangeCountFlags(int kill = FLAG_NO_CHANGE, int item = FLAG_NO_CHANGE, int secret = FLAG_NO_CHANGE);
+
+	void A_SetFriendly (bool set)
+	{
+		if (CountsAsKill() && health > 0) level.total_monsters--;
+		bFriendly = set;
+		if (CountsAsKill() && health > 0) level.total_monsters++;
+	}
+
 	native void A_RaiseMaster(int flags = 0);
 	native void A_RaiseChildren(int flags = 0);
 	native void A_RaiseSiblings(int flags = 0);
@@ -1174,7 +1192,7 @@ class Actor : Thinker native
 	native bool A_SetVisibleRotation(double anglestart = 0, double angleend = 0, double pitchstart = 0, double pitchend = 0, int flags = 0, int ptr = AAPTR_DEFAULT);
 	native void A_SetTranslation(name transname);
 	native bool A_SetSize(double newradius = -1, double newheight = -1, bool testpos = false);
-	native void A_SprayDecal(String name, double dist = 172, vector3 offset = (0, 0, 0), vector3 direction = (0, 0, 0) );
+	native void A_SprayDecal(String name, double dist = 172, vector3 offset = (0, 0, 0), vector3 direction = (0, 0, 0), bool useBloodColor = false, color decalColor = 0);
 	native void A_SetMugshotState(String name);
 	native void CopyBloodColor(Actor other);
 
