@@ -1015,14 +1015,14 @@ DEFINE_MAP_OPTION(fade, true)
 {
 	parse.ParseAssign();
 	parse.sc.MustGetString();
-	info->fadeto = V_GetColor(NULL, parse.sc);
+	info->fadeto = V_GetColor(parse.sc);
 }
 
 DEFINE_MAP_OPTION(outsidefog, true)
 {
 	parse.ParseAssign();
 	parse.sc.MustGetString();
-	info->outsidefog = V_GetColor(NULL, parse.sc);
+	info->outsidefog = V_GetColor(parse.sc);
 }
 
 DEFINE_MAP_OPTION(titlepatch, true)
@@ -1398,14 +1398,14 @@ DEFINE_MAP_OPTION(hazardcolor, true)
 {
 	parse.ParseAssign();
 	parse.sc.MustGetString();
-	info->hazardcolor = V_GetColor(NULL, parse.sc);
+	info->hazardcolor = V_GetColor(parse.sc);
 }
 
 DEFINE_MAP_OPTION(hazardflash, true)
 {
 	parse.ParseAssign();
 	parse.sc.MustGetString();
-	info->hazardflash = V_GetColor(NULL, parse.sc);
+	info->hazardflash = V_GetColor(parse.sc);
 }
 
 DEFINE_MAP_OPTION(fogdensity, false)
@@ -1665,6 +1665,7 @@ MapFlagHandlers[] =
 	{ "enableshadowmap",				MITYPE_CLRFLAG3,	LEVEL3_NOSHADOWMAP, 0 },
 	{ "enableskyboxao",					MITYPE_SETFLAG3,	LEVEL3_SKYBOXAO, 0 },
 	{ "disableskyboxao",				MITYPE_CLRFLAG3,	LEVEL3_SKYBOXAO, 0 },
+	{ "avoidmelee",						MITYPE_SETFLAG3,	LEVEL3_AVOIDMELEE, 0 },
 
 	// these are redemption specific
 	{ "noautomap",						MITYPE_SETFLAGR,	LEVELR_NOAUTOMAP, 0 },
@@ -1712,6 +1713,8 @@ MapFlagHandlers[] =
 	{ "compat_explode2",				MITYPE_COMPATFLAG, 0, COMPATF2_EXPLODE2 },
 	{ "compat_railing",					MITYPE_COMPATFLAG, 0, COMPATF2_RAILING },
 	{ "compat_scriptwait",				MITYPE_COMPATFLAG, 0, COMPATF2_SCRIPTWAIT },
+	{ "compat_avoidhazards",			MITYPE_COMPATFLAG, 0, COMPATF2_AVOID_HAZARDS },
+	{ "compat_stayonlift",				MITYPE_COMPATFLAG, 0, COMPATF2_STAYONLIFT },
 	{ "cd_start_track",					MITYPE_EATNEXT,	0, 0 },
 	{ "cd_end1_track",					MITYPE_EATNEXT,	0, 0 },
 	{ "cd_end2_track",					MITYPE_EATNEXT,	0, 0 },

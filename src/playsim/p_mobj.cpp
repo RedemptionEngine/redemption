@@ -584,7 +584,11 @@ bool AActor::SetState (FState *newstate, bool nofunction)
 		newstate = newstate->GetNextState();
 	} while (tics == 0);
 
-	flags8 |= MF8_RECREATELIGHTS;
+	if (GetInfo()->LightAssociations.Size() || (newstate && newstate->Light > 0))
+	{
+		flags8 |= MF8_RECREATELIGHTS;
+		Level->flags3 |= LEVEL3_LIGHTCREATED;
+	}
 	return true;
 }
 
@@ -4799,7 +4803,11 @@ void AActor::PostBeginPlay ()
 {
 	PrevAngles = Angles;
 	flags7 |= MF7_HANDLENODELAY;
-	flags8 |= MF8_RECREATELIGHTS;
+	if (GetInfo()->LightAssociations.Size() || (state && state->Light > 0))
+	{
+		flags8 |= MF8_RECREATELIGHTS;
+		Level->flags3 |= LEVEL3_LIGHTCREATED;
+	}
 }
 
 void AActor::CallPostBeginPlay()
@@ -5728,7 +5736,7 @@ AActor *FLevelLocals::SpawnMapThing (FMapThing *mthing, int position)
 	{
 		if (mthing->arg0str != NAME_None)
 		{
-			PalEntry color = V_GetColor(nullptr, mthing->arg0str.GetChars());
+			PalEntry color = V_GetColor(mthing->arg0str.GetChars());
 			mobj->args[0] = color.r;
 			mobj->args[1] = color.g;
 			mobj->args[2] = color.b;

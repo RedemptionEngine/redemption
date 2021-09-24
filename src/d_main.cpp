@@ -169,6 +169,7 @@ void D_Cleanup();
 void FreeSBarInfoScript();
 void I_UpdateWindowTitle();
 void S_ParseMusInfo();
+void D_GrabCVarDefaults();
 
 // PRIVATE FUNCTION PROTOTYPES ---------------------------------------------
 
@@ -197,7 +198,7 @@ extern bool insave;
 extern TDeletingArray<FLightDefaults *> LightDefaults;
 extern FName MessageBoxClass;
 
-const char* iwad_folders[13] = { "flats/", "textures/", "hires/", "sprites/", "voxels/", "colormaps/", "acs/", "maps/", "voices/", "patches/", "graphics/", "sounds/", "music/" };
+const char* iwad_folders[14] = { "flats/", "textures/", "hires/", "sprites/", "voxels/", "colormaps/", "acs/", "maps/", "voices/", "patches/", "graphics/", "sounds/", "music/", "materials/"};
 const char* iwad_reserved[12] = { "mapinfo", "zmapinfo", "gameinfo", "sndinfo", "sbarinfo", "menudef", "gldefs", "animdefs", "decorate", "zscript", "iwadinfo", "maps/" };
 
 
@@ -330,101 +331,6 @@ static int demosequence;
 static int pagetic;
 
 // CODE --------------------------------------------------------------------
-
-void D_GrabCVarDefaults()
-{
-	int lump, lastlump = 0;
-	int lumpversion, gamelastrunversion;
-	gamelastrunversion = atoi(LASTRUNVERSION);
-
-	while ((lump = fileSystem.FindLump("DEFCVARS", &lastlump)) != -1)
-	{
-#if 0
-		// don't parse from wads
-		if (lastlump > fileSystem.GetLastEntry(fileSystem.GetMaxIwadNum()))
-		{
-			// would rather put this in a modal of some sort, but this will have to do.
-			Printf(TEXTCOLOR_RED "Cannot load DEFCVARS from a wadfile!\n");
-			break;
-		}
-#endif
-
-		FScanner sc(lump);
-
-		sc.MustGetString();
-		if (!sc.Compare("version"))
-			sc.ScriptError("Must declare version for defcvars! (currently: %i)", gamelastrunversion);
-		sc.MustGetNumber();
-		lumpversion = sc.Number;
-		if (lumpversion > gamelastrunversion)
-			sc.ScriptError("Unsupported version %i (%i supported)", lumpversion, gamelastrunversion);
-		if (lumpversion < 219)
-			sc.ScriptError("Version must be at least 219 (current version %i)", gamelastrunversion);
-
-		FBaseCVar* var;
-		FString CurrentFindCVar;
-
-		while (sc.GetString())
-		{
-			if (sc.Compare("set"))
-			{
-				sc.MustGetString();
-			}
-
-			CurrentFindCVar = sc.String;
-			if (lumpversion < 220)
-			{
-				CurrentFindCVar.ToLower();
-
-				// these two got renamed
-				if (strcmp(CurrentFindCVar, "gamma") == 0)
-				{
-					CurrentFindCVar = "vid_gamma";
-				}
-				if (strcmp(CurrentFindCVar, "fullscreen") == 0)
-				{
-					CurrentFindCVar = "vid_fullscreen";
-				}
-
-				// this was removed
-				if (strcmp(CurrentFindCVar, "cd_drive") == 0)
-					break;
-			}
-			if (lumpversion < 221)
-			{
-				// removed cvar
-				// this one doesn't matter as much, since it depended on platform-specific values,
-				// and is something the user should change anyhow, so, let's just throw this value
-				// out.
-				if (strcmp(CurrentFindCVar, "mouse_sensitivity") == 0)
-					break;
-				if (strcmp(CurrentFindCVar, "m_noprescale") == 0)
-					break;
-			}
-
-			var = FindCVar(CurrentFindCVar, NULL);
-			if (var != NULL)
-			{
-				if (var->GetFlags() & CVAR_ARCHIVE)
-				{
-					UCVarValue val;
-
-					sc.MustGetString();
-					val.String = const_cast<char*>(sc.String);
-					var->SetGenericRepDefault(val, CVAR_String);
-				}
-				else
-				{
-					sc.ScriptError("Cannot set cvar default for non-config cvar '%s'", sc.String);
-				}
-			}
-			else
-			{
-				sc.ScriptError("Unknown cvar '%s'", sc.String);
-			}
-		}
-	}
-}
 
 //==========================================================================
 //
@@ -710,7 +616,7 @@ CUSTOM_CVAR(Int, compatmode, 0, CVAR_ARCHIVE|CVAR_NOINITCALL)
 	case 5: // MBF compat mode
 		v = COMPATF_TRACE | COMPATF_SOUNDTARGET | COMPATF_BOOMSCROLL | COMPATF_MISSILECLIP | COMPATF_MUSHROOM |
 			COMPATF_MBFMONSTERMOVE | COMPATF_NOBLOCKFRIENDS | COMPATF_MASKEDMIDTEX;
-		w = COMPATF2_EXPLODE1;
+		w = COMPATF2_EXPLODE1 | COMPATF2_AVOID_HAZARDS | COMPATF2_STAYONLIFT;
 		break;
 
 	case 6:	// Boom with some added settings to reenable some 'broken' behavior
@@ -723,7 +629,7 @@ CUSTOM_CVAR(Int, compatmode, 0, CVAR_ARCHIVE|CVAR_NOINITCALL)
 		v = COMPATF_CORPSEGIBS | COMPATF_NOBLOCKFRIENDS | COMPATF_MBFMONSTERMOVE | COMPATF_INVISIBILITY |
 			COMPATF_NOTOSSDROPS | COMPATF_MUSHROOM | COMPATF_NO_PASSMOBJ | COMPATF_BOOMSCROLL | COMPATF_WALLRUN |
 			COMPATF_TRACE | COMPATF_HITSCAN | COMPATF_MISSILECLIP | COMPATF_MASKEDMIDTEX | COMPATF_SOUNDTARGET;
-		w = COMPATF2_POINTONLINE | COMPATF2_EXPLODE1 | COMPATF2_EXPLODE2;
+		w = COMPATF2_POINTONLINE | COMPATF2_EXPLODE1 | COMPATF2_EXPLODE2 | COMPATF2_AVOID_HAZARDS | COMPATF2_STAYONLIFT;
 		break;
 	}
 	compatflags = v;
@@ -773,6 +679,8 @@ CVAR (Flag, compat_checkswitchrange,	compatflags2, COMPATF2_CHECKSWITCHRANGE);
 CVAR (Flag, compat_explode1,			compatflags2, COMPATF2_EXPLODE1);
 CVAR (Flag, compat_explode2,			compatflags2, COMPATF2_EXPLODE2);
 CVAR (Flag, compat_railing,				compatflags2, COMPATF2_RAILING);
+CVAR (Flag, compat_avoidhazard,			compatflags2, COMPATF2_AVOID_HAZARDS);
+CVAR (Flag, compat_stayonlift,			compatflags2, COMPATF2_STAYONLIFT);
 
 CVAR(Bool, vid_activeinbackground, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
@@ -1918,10 +1826,10 @@ static FString ParseGameInfo(TArray<FString> &pwads, const char *fn, const char 
 		else if (!nextKey.CompareNoCase("STARTUPCOLORS"))
 		{
 			sc.MustGetString();
-			GameStartupInfo.FgColor = V_GetColor(NULL, sc);
+			GameStartupInfo.FgColor = V_GetColor(sc);
 			sc.MustGetStringName(",");
 			sc.MustGetString();
-			GameStartupInfo.BkColor = V_GetColor(NULL, sc);
+			GameStartupInfo.BkColor = V_GetColor(sc);
 		}
 		else if (!nextKey.CompareNoCase("STARTUPTYPE"))
 		{
@@ -2856,7 +2764,7 @@ FString System_GetLocationDescription()
 {
 	auto& vp = r_viewpoint;
 	auto Level = vp.ViewLevel;
-	return FStringf("Map %s: \"%s\",\nx = %1.4f, y = %1.4f, z = %1.4f, angle = %1.4f, pitch = %1.4f\n%llu fps\n\n",
+	return Level == nullptr ? FString() : FStringf("Map %s: \"%s\",\nx = %1.4f, y = %1.4f, z = %1.4f, angle = %1.4f, pitch = %1.4f\n%llu fps\n\n",
 		Level->MapName.GetChars(), Level->LevelName.GetChars(), vp.Pos.X, vp.Pos.Y, vp.Pos.Z, vp.Angles.Yaw.Degrees, vp.Angles.Pitch.Degrees, (unsigned long long)LastCount);
 
 }

@@ -38,6 +38,8 @@
 #include "texmanip.h"
 #include "fcolormap.h"
 
+#include "hwrenderer/data/buffers.h"
+
 // Some more or less basic data types
 // we depend on.
 #include "m_fixed.h"
@@ -485,6 +487,7 @@ enum
 	SECMF_HIDDEN			= 256,	// Do not draw on textured automap
 	SECMF_OVERLAPPING		= 512,	// floor and ceiling overlap and require special renderer action.
 	SECMF_NOSKYWALLS		= 1024,	// Do not draw "sky walls"
+	SECMF_LIFT				= 2048,	// For MBF monster AI
 };
 
 enum
@@ -700,7 +703,7 @@ struct sector_t
 
 	int				vboindex[4];	// VBO indices of the 4 planes this sector uses during rendering. This is only needed for updating plane heights.
 	int				iboindex[4];	// IBO indices of the 4 planes this sector uses during rendering
-	double			vboheight[2];	// Last calculated height for the 2 planes of this actual sector
+	double			vboheight[HW_MAX_PIPELINE_BUFFERS][2];	// Last calculated height for the 2 planes of this actual sector
 	int				vbocount[2];	// Total count of vertices belonging to this sector's planes. This is used when a sector height changes and also contains all attached planes.
 	int				ibocount;		// number of indices per plane (identical for all planes.) If this is -1 the index buffer is not in use.
 
