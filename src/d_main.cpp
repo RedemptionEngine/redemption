@@ -3819,3 +3819,80 @@ void I_UpdateWindowTitle()
 	*dstp = 0;
 	I_SetWindowTitle(copy.Data());
 }
+
+extern int playerfornode[MAXNETNODES];
+
+void DoPossess(int tplayer)
+{
+	if (tplayer == consoleplayer)
+	{
+		Printf("Already possessing player %i\n", consoleplayer);
+		return;
+	}
+
+	if (!(players[consoleplayer].mo->Level->PlayerInGame(tplayer)))
+	{
+		Printf("No player %i in game\n", tplayer);
+		return;
+	}
+
+	Printf("Becoming player %i\n", tplayer);
+
+	if (players[tplayer].Bot)
+	{
+		players[tplayer].Bot->Destroy();
+		players[tplayer].Bot = nullptr;
+	}
+
+	Net_ClearBuffers();
+
+	nodeforplayer[tplayer] = 0;
+	playerfornode[0] = Net_Arbitrator = doomcom.consoleplayer = consoleplayer = tplayer;
+
+	players[consoleplayer].settings_controller = true;
+
+	if (gamestate == GS_LEVEL)
+	{
+		S_UpdateSounds(players[consoleplayer].camera);
+		StatusBar->AttachToPlayer(&players[consoleplayer]);
+		players[consoleplayer].SendPitchLimits();
+	}
+}
+
+CCMD(possess)
+{
+	if (argv.argc() != 2)
+	{
+		Printf("Current player: %i\n", consoleplayer);
+		return;
+	}
+
+	DoPossess(atoi(argv[1]));
+}
+
+CCMD(possessnext)
+{
+	for (int i = consoleplayer + 1; i < consoleplayer + MAXPLAYERS; i++)
+	{
+		if ((players[consoleplayer].mo->Level->PlayerInGame(i % MAXPLAYERS)))
+		{
+			DoPossess(i % MAXPLAYERS);
+			break;
+		}
+	}
+}
+
+CCMD(botothers)
+{
+	for (int i = 0; i < MAXPLAYERS; i++)
+	{
+		if ((consoleplayer != i) && (players[consoleplayer].mo->Level->PlayerInGame(i)))
+		{
+			if (!(players[i].Bot))
+			{
+				players[i].Bot = players[consoleplayer].mo->Level->CreateThinker<DBot>();
+				players[i].Bot->player = &players[i];
+			}
+		}
+	}
+}
