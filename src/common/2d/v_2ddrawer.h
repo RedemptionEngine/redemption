@@ -243,7 +243,7 @@ public:
 	bool mIsFirstPass = true;
 };
 
-struct DShape2DBufferInfo : NoVirtualRefCountedBase
+struct DShape2DBufferInfo : RefCountedBase
 {
 	TArray<F2DVertexBuffer> buffers;
 	bool needsVertexUpload = true;
@@ -306,8 +306,8 @@ public:
 
 	void UploadData(F2DDrawer::TwoDVertex *vertices, int vertcount, int *indices, int indexcount)
 	{
-		mVertexBuffer->SetData(vertcount * sizeof(*vertices), vertices, false);
-		mIndexBuffer->SetData(indexcount * sizeof(unsigned int), indices, false);
+		mVertexBuffer->SetData(vertcount * sizeof(*vertices), vertices, BufferUsageType::Stream);
+		mIndexBuffer->SetData(indexcount * sizeof(unsigned int), indices, BufferUsageType::Stream);
 	}
 
 	std::pair<IVertexBuffer *, IIndexBuffer *> GetBufferObjects() const
