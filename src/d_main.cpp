@@ -3861,6 +3861,12 @@ void DoPossess(int tplayer)
 
 CCMD(possess)
 {
+	if (netgame)
+	{
+		Printf("Cannot use this command in a netgame!\n");
+		return;
+	}
+
 	if (argv.argc() != 2)
 	{
 		Printf("Current player: %i\n", consoleplayer);
@@ -3872,6 +3878,12 @@ CCMD(possess)
 
 CCMD(possessnext)
 {
+	if (netgame)
+	{
+		Printf("Cannot use this command in a netgame!\n");
+		return;
+	}
+
 	for (int i = consoleplayer + 1; i < consoleplayer + MAXPLAYERS; i++)
 	{
 		if ((players[consoleplayer].mo->Level->PlayerInGame(i % MAXPLAYERS)))
@@ -3884,6 +3896,12 @@ CCMD(possessnext)
 
 CCMD(botothers)
 {
+	if (netgame)
+	{
+		Printf("Cannot use this command in a netgame!\n");
+		return;
+	}
+
 	for (int i = 0; i < MAXPLAYERS; i++)
 	{
 		if ((consoleplayer != i) && (players[consoleplayer].mo->Level->PlayerInGame(i)))
