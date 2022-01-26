@@ -33,7 +33,7 @@
 */
 
 #include <assert.h>
-#include "templates.h"
+
 #include "d_main.h"
 #include "g_level.h"
 #include "g_game.h"
@@ -2282,4 +2282,3 @@ void FLevelLocals::SetMusic()
 {
 	S_ChangeMusic(Music, musicorder);
 }
-
