@@ -753,6 +753,21 @@ public:
 				th->friendlyseeblocks = CheckInt(key);
 				break;
 
+			case NAME_Lightcolor:
+			case NAME_lightintensity:
+			case NAME_lightdistance:
+			case NAME_lightinnerangle:
+			case NAME_lightouterangle:
+			case NAME_suncolor:
+			case NAME_sundirx:
+			case NAME_sundiry:
+			case NAME_sundirz:
+			case NAME_sampledistance:
+			case NAME_bounces:
+			case NAME_gridsize:
+				CHECK_N(Zd | Zdt)
+				break;
+
 			default:
 				CHECK_N(Zd | Zdt)
 				if (0 == strnicmp("user_", key.GetChars(), 5))
@@ -1123,6 +1138,12 @@ public:
 				ld->healthgroup = CheckInt(key);
 				break;
 
+			case NAME_Lightcolor:
+			case NAME_lightintensity:
+			case NAME_lightdistance:
+				CHECK_N(Zd | Zdt)
+				break;
+
 			default:
 				if (strnicmp("user_", key.GetChars(), 5))
 					DPrintf(DMSG_WARNING, "Unknown UDMF linedef key %s\n", key.GetChars());
@@ -1300,6 +1321,30 @@ public:
 
 			case NAME_lightabsolute:
 				Flag(sd->Flags, WALLF_ABSLIGHTING, key);
+				continue;
+
+			case NAME_light_top:
+				sd->SetLight(CheckInt(key), side_t::top);
+				continue;
+				
+			case NAME_lightabsolute_top:
+				Flag(sd->Flags, WALLF_ABSLIGHTING_TOP, key);
+				continue;
+
+			case NAME_light_mid:
+				sd->SetLight(CheckInt(key), side_t::mid);
+				continue;
+
+			case NAME_lightabsolute_mid:
+				Flag(sd->Flags, WALLF_ABSLIGHTING_MID, key);
+				continue;
+
+			case NAME_light_bottom:
+				sd->SetLight(CheckInt(key), side_t::bottom);
+				continue;
+
+			case NAME_lightabsolute_bottom:
+				Flag(sd->Flags, WALLF_ABSLIGHTING_BOTTOM, key);
 				continue;
 
 			case NAME_lightfog:
@@ -1948,7 +1993,16 @@ public:
 				case NAME_Health3DGroup:
 					sec->health3dgroup = CheckInt(key);
 					break;
-					
+
+				case NAME_lightcolorfloor:
+				case NAME_lightintensityfloor:
+				case NAME_lightdistancefloor:
+				case NAME_lightcolorceiling:
+				case NAME_lightintensityceiling:
+				case NAME_lightdistanceceiling:
+					CHECK_N(Zd | Zdt)
+					break;
+
 				default:
 					if (strnicmp("user_", key.GetChars(), 5))
 						DPrintf(DMSG_WARNING, "Unknown UDMF sector key %s\n", key.GetChars());
