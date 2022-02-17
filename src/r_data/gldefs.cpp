@@ -65,7 +65,7 @@ struct ExtraUniformCVARData
 	FString Shader;
 	FString Uniform;
 	double* vec4 = nullptr;
-	ExtraUniformCVARData* Next;
+	ExtraUniformCVARData* Next = nullptr;
 };
 
 static void do_uniform_set(float value, ExtraUniformCVARData* data)
@@ -1560,7 +1560,7 @@ class GLDefsParser
 						ExtraUniformCVARData* oldextra = nullptr;
 						sc.MustGetFloat();
 						
-						val.Float = oldval.Float = sc.Float;
+						val.Float = oldval.Float = (float)sc.Float;
 
 						if (!cvar)
 						{

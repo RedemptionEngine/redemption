@@ -753,15 +753,8 @@ public:
 				th->friendlyseeblocks = CheckInt(key);
 				break;
 
-			case NAME_Lightcolor:
 			case NAME_lightintensity:
-			case NAME_lightdistance:
-			case NAME_lightinnerangle:
-			case NAME_lightouterangle:
 			case NAME_suncolor:
-			case NAME_sundirx:
-			case NAME_sundiry:
-			case NAME_sundirz:
 			case NAME_sampledistance:
 			case NAME_bounces:
 			case NAME_gridsize:
