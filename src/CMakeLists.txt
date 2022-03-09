@@ -1361,6 +1361,11 @@ if( NOT WIN32 AND NOT APPLE )
 	add_custom_command( TARGET zdoom POST_BUILD
 		COMMAND chmod +x ${CMAKE_CURRENT_BINARY_DIR}/link-make
 		COMMAND /bin/sh -c ${CMAKE_CURRENT_BINARY_DIR}/link-make )
+	set_target_properties(zdoom PROPERTIES
+		#allow zmusic.so library in same folder as executable at runtime
+		INSTALL_RPATH "\$ORIGIN"
+		BUILD_WITH_INSTALL_RPATH ON
+	)
 endif()
 
 add_custom_command(TARGET zdoom POST_BUILD
@@ -1512,11 +1517,4 @@ source_group("Statusbar" REGULAR_EXPRESSION "^${CMAKE_CURRENT_SOURCE_DIR}/g_stat
 source_group("Versioning" FILES version.h win32/zdoom.rc)
 source_group("Xlat" REGULAR_EXPRESSION "^${CMAKE_CURRENT_SOURCE_DIR}/xlat/.+" FILES ${CMAKE_CURRENT_BINARY_DIR}/xlat_parser.c ${CMAKE_CURRENT_BINARY_DIR}/xlat_parser.h)
 source_group("Source Files" FILES ${CMAKE_CURRENT_BINARY_DIR}/sc_man_scanner.h common/engine/sc_man_scanner.re)
-
-# allow zmusic.so to be loaded from executable folder at runtime
-add_custom_command(TARGET zdoom POST_BUILD
-	COMMAND patchelf --set-rpath \\$$ORIGIN ${ZDOOM_OUTPUT_DIR}/${ZDOOM_EXE_NAME}
-	COMMENT "Patching RPath for ZMusic.so..."
-)
-
 
