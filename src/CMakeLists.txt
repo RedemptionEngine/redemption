@@ -1512,3 +1512,11 @@ source_group("Statusbar" REGULAR_EXPRESSION "^${CMAKE_CURRENT_SOURCE_DIR}/g_stat
 source_group("Versioning" FILES version.h win32/zdoom.rc)
 source_group("Xlat" REGULAR_EXPRESSION "^${CMAKE_CURRENT_SOURCE_DIR}/xlat/.+" FILES ${CMAKE_CURRENT_BINARY_DIR}/xlat_parser.c ${CMAKE_CURRENT_BINARY_DIR}/xlat_parser.h)
 source_group("Source Files" FILES ${CMAKE_CURRENT_BINARY_DIR}/sc_man_scanner.h common/engine/sc_man_scanner.re)
+
+# allow zmusic.so to be loaded from executable folder at runtime
+add_custom_command(TARGET zdoom POST_BUILD
+	COMMAND patchelf --set-rpath \\$$ORIGIN ${ZDOOM_OUTPUT_DIR}/${ZDOOM_EXE_NAME}
+	COMMENT "Patching RPath for ZMusic.so..."
+)
+
+
