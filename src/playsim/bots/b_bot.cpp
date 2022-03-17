@@ -139,16 +139,19 @@ void DBot::Tick ()
 {
 	Super::Tick ();
 
-	if (player->mo == nullptr || Level->isFrozen())
+	if (player->mo == nullptr)
 	{
 		return;
 	}
+	ticcmd_t *cmd = &netcmds[player - players][((gametic + 1)/ticdup)%BACKUPTICS];
 
-	BotThinkCycles.Clock();
-	Level->BotInfo.m_Thinking = true;
-	Think ();
-	Level->BotInfo.m_Thinking = false;
-	BotThinkCycles.Unclock();
+	memset (cmd, 0, sizeof(*cmd));
+
+	IFVIRTUAL(DBot, Thinker)
+	{
+		VMValue params[2] = { (DBot*)this, (ticcmd_t*)cmd };
+		VMCall(func, params, 2, nullptr, 0);
+	}
 }
 
 CVAR (Int, bot_next_color, 11, 0)
@@ -245,70 +248,3 @@ CCMD (listbots)
 	Printf ("> %d bots\n", count);
 }
 
-// set the bot specific weapon information
-// This is intentionally not in the weapon definition anymore.
-
-BotInfoMap BotInfo;
-
-void InitBotStuff()
-{
-	int lump;
-	int lastlump = 0;
-	while (-1 != (lump = fileSystem.FindLump("BOTSUPP", &lastlump)))
-	{
-		FScanner sc(lump);
-		sc.SetCMode(true);
-		while (sc.GetString())
-		{
-			PClassActor *wcls = PClass::FindActor(sc.String);
-			if (wcls != nullptr && wcls->IsDescendantOf(NAME_Weapon))
-			{
-				BotInfoData bi = {};
-				sc.MustGetStringName(",");
-				sc.MustGetNumber();
-				bi.MoveCombatDist = sc.Number;
-				while (sc.CheckString(","))
-				{
-					sc.MustGetString();
-					if (sc.Compare("BOT_REACTION_SKILL_THING"))
-					{
-						bi.flags |= BIF_BOT_REACTION_SKILL_THING;
-					}
-					else if (sc.Compare("BOT_EXPLOSIVE"))
-					{
-						bi.flags |= BIF_BOT_EXPLOSIVE;
-					}
-					else if (sc.Compare("BOT_BFG"))
-					{
-						bi.flags |= BIF_BOT_BFG;
-					}
-					else
-					{
-						PClassActor *cls = PClass::FindActor(sc.String);
-						bi.projectileType = cls;
-						if (cls == nullptr)
-						{
-							sc.ScriptError("Unknown token %s", sc.String);
-						}
-					}
-				}
-				BotInfo[wcls->TypeName] = bi;
-			}
-			else
-			{
-				sc.ScriptError("%s is not a weapon type", sc.String);
-			}
-		}
-	}
-
-	// Fixme: Export these, too.
-	static const char *warnbotmissiles[] = { "PlasmaBall", "Ripper", "HornRodFX1" };
-	for(unsigned i=0;i<countof(warnbotmissiles);i++)
-	{
-		AActor *a = GetDefaultByName (warnbotmissiles[i]);
-		if (a != nullptr)
-		{
-			a->flags3|=MF3_WARNBOT;
-		}
-	}
-}
