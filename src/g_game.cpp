@@ -2031,7 +2031,7 @@ void G_DoLoadGame ()
 
 	if (!G_CheckSaveGameWads(arc, true))
 	{
-		return;
+		//return;
 	}
 
 	if (map.IsEmpty())
