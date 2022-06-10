@@ -947,8 +947,8 @@ CCMD(currentpos)
 	AActor *mo = players[consoleplayer].mo;
 	if(mo)
 	{
-		Printf("Current player position: (%1.3f,%1.3f,%1.3f), angle: %1.3f, floorheight: %1.3f, sector:%d, lightlevel: %d\n",
-			mo->X(), mo->Y(), mo->Z(), mo->Angles.Yaw.Normalized360().Degrees, mo->floorz, mo->Sector->sectornum, mo->Sector->lightlevel);
+		Printf("Current player position: (%1.3f,%1.3f,%1.3f), angle: %1.3f, floorheight: %1.3f, sector:%d, sector lightlevel: %d, actor lightlevel: %d\n",
+			mo->X(), mo->Y(), mo->Z(), mo->Angles.Yaw.Normalized360().Degrees, mo->floorz, mo->Sector->sectornum, mo->Sector->lightlevel, mo->LightLevel);
 	}
 	else
 	{
@@ -1029,10 +1029,10 @@ CCMD(secret)
 	maphdr.Format("[%s]", mapname);
 
 	FString linebuild;
-	char readbuffer[1024];
+	char readbuffer[10240];
 	bool inlevel = false;
 
-	while (lump.Gets(readbuffer, 1024))
+	while (lump.Gets(readbuffer, 10240))
 	{
 		if (!inlevel)
 		{

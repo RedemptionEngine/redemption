@@ -1201,7 +1201,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_CustomRailgun)
 	{
 		self->Angles.Yaw = self->AngleTo(self->target);
 	}
-	self->Angles.Pitch = P_AimLineAttack (self, self->Angles.Yaw, MISSILERANGE, &t, 60., 0, aim ? self->target : NULL);
+	self->Angles.Pitch = P_AimLineAttack (self, self->Angles.Yaw, MISSILERANGE, &t, 60., 0, aim ? self->target.Get() : nullptr);
 	if (t.linetarget == NULL && aim)
 	{
 		// We probably won't hit the target, but aim at it anyway so we don't look stupid.
@@ -1649,7 +1649,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_SpawnParticle)
 		if (flags & SPF_RELANG) angle += self->Angles.Yaw;
 		double s = angle.Sin();
 		double c = angle.Cos();
-		DVector3 pos(xoff, yoff, zoff);
+		DVector3 pos(xoff, yoff, zoff + self->GetBobOffset());
 		DVector3 vel(xvel, yvel, zvel);
 		DVector3 acc(accelx, accely, accelz);
 		//[MC] Code ripped right out of A_SpawnItemEx.

@@ -175,7 +175,7 @@ void OpenGLFrameBuffer::InitializeState()
 	GLRenderer->Initialize(GetWidth(), GetHeight());
 	static_cast<GLDataBuffer*>(mLights->GetBuffer())->BindBase();
 
-	mDebug = std::make_shared<FGLDebug>();
+	mDebug = std::make_unique<FGLDebug>();
 	mDebug->Update();
 }
 
@@ -559,6 +559,11 @@ void OpenGLFrameBuffer::PostProcessScene(bool swscene, int fixedcm, float flash,
 {
 	if (!swscene) GLRenderer->mBuffers->BlitSceneToTexture(); // Copy the resulting scene to the current post process texture
 	GLRenderer->PostProcessScene(fixedcm, flash, afterBloomDrawEndScene2D);
+}
+
+bool OpenGLFrameBuffer::CompileNextShader()
+{
+	return GLRenderer->mShaderManager->CompileNextShader();
 }
 
 //==========================================================================

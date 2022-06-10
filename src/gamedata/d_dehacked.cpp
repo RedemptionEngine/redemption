@@ -237,7 +237,6 @@ static AmmoPerAttack AmmoPerAttacks[] = {
 	{ NAME_A_FireBFG, -1},	// uses deh.BFGCells
 	{ NAME_A_FireOldBFG, 1},
 	{ NAME_A_FireRailgun, 1},
-	{ NAME_A_ConsumeAmmo, 1}, // MBF21
 	{ NAME_None, 0}
 };
 
@@ -406,7 +405,7 @@ static bool ReadChars (char **stuff, int size);
 static char *igets (void);
 static int GetLine (void);
 
-inline double DEHToDouble(int acsval)
+inline double DEHToDouble(int64_t acsval)
 {
 	return acsval / 65536.;
 }
@@ -1139,16 +1138,21 @@ static int PatchThing (int thingy)
 	while ((result = GetLine ()) == 1)
 	{
 		char *endptr;
-		uint32_t val = (uint32_t)strtoull (Line2, &endptr, 10);
+		int64_t val = (int64_t)strtoll (Line2, &endptr, 10);
 		size_t linelen = strlen (Line1);
 
-		if (linelen == 10 && stricmp (Line1, "Hit points") == 0)
+		// Supported value range is all valid representations of signed int and unsigned int.
+		if (errno == ERANGE || val < INT_MIN || val > UINT_MAX)
 		{
-			info->health = val;
+			Printf("Bad numeric constant %s for %s\n", Line2, Line1);
+		}
+		else if (linelen == 10 && stricmp (Line1, "Hit points") == 0)
+		{
+			info->health = (int)val;
 		}
 		else if (linelen == 13 && stricmp (Line1, "Reaction time") == 0)
 		{
-			info->reactiontime = val;
+			info->reactiontime = (int)val;
 		}
 		else if (linelen == 11 && stricmp (Line1, "Pain chance") == 0)
 		{
@@ -1170,13 +1174,13 @@ static int PatchThing (int thingy)
 		}
 		else if (linelen == 14 && stricmp (Line1, "Missile damage") == 0)
 		{
-			info->SetDamage(val);
+			info->SetDamage((int)val);
 		}
 		else if (linelen == 5)
 		{
 			if (stricmp (Line1, "Speed") == 0)
 			{
-				info->Speed = (signed long)val;	// handle fixed point later.
+				info->Speed = (double)val;	// handle fixed point later.
 			}
 			else if (stricmp (Line1, "Width") == 0)
 			{
@@ -1233,12 +1237,12 @@ static int PatchThing (int thingy)
 				Printf("Infighting groups must be >= 0 (check your dehacked)\n");
 				val = 0;
 			}
-			type->ActorInfo()->infighting_group = val;
+			type->ActorInfo()->infighting_group = (int)val;
 		}
 		else if (linelen == 16 && stricmp(Line1, "projectile group") == 0)
 		{
 			if (val < 0) val = -1;
-			type->ActorInfo()->projectile_group = val;
+			type->ActorInfo()->projectile_group = (int)val;
 		}
 		else if (linelen == 12 && stricmp(Line1, "splash group") == 0)
 		{
@@ -1247,11 +1251,11 @@ static int PatchThing (int thingy)
 				Printf("Splash groups must be >= 0 (check your dehacked)\n");
 				val = 0;
 			}
-			type->ActorInfo()->splash_group = val;
+			type->ActorInfo()->splash_group = (int)val;
 		}
 		else if (linelen == 10 && stricmp(Line1, "fast speed") == 0)
 		{
-			double fval = val >= 256 ? DEHToDouble(val) : val;
+			double fval = val >= 256 ? DEHToDouble(val) : double(val);
 			info->FloatVar(NAME_FastSpeed) = fval;
 		}
 		else if (linelen == 11 && stricmp(Line1, "melee range") == 0)
@@ -1260,14 +1264,20 @@ static int PatchThing (int thingy)
 		}
 		else if (linelen == 12 && stricmp(Line1, "dropped item") == 0)
 		{
+			val--;	// This is 1-based and 0 means 'no drop'.
 			if ((unsigned)val < InfoNames.Size())
 			{
 				FDropItem* di = (FDropItem*)ClassDataAllocator.Alloc(sizeof(FDropItem));
 
+				di->Next = nullptr;
 				di->Name = InfoNames[val]->TypeName.GetChars();
 				di->Probability = 255;
 				di->Amount = -1;
 				info->GetInfo()->DropItems = di;
+			}
+			else if ((int)val == -1)
+			{
+				info->GetInfo()->DropItems = nullptr;
 			}
 		}
 		else if (linelen == 11 && stricmp(Line1, "blood color") == 0)
@@ -1284,7 +1294,7 @@ static int PatchThing (int thingy)
 			  0xffff8000, // 8 - Orange
 			};
 
-			if (val < 0 || val > 8) val = 0;
+			if (val > 8 || val < 0) val = 0;
 			unsigned color = bloodcolor[val];
 			info->BloodColor = color;
 			info->BloodTranslation = val == 0? 0 : TRANSLATION(TRANSLATION_Blood, CreateBloodTranslation(color));
@@ -1338,7 +1348,7 @@ static int PatchThing (int thingy)
 		{
 			if (stricmp (Line1 + linelen - 6, " frame") == 0)
 			{
-				FState *state = FindState (val);
+				FState *state = FindState ((int)val);
 
 				if (type != NULL && !patchedStates)
 				{
@@ -1411,7 +1421,7 @@ static int PatchThing (int thingy)
 		{
 			if (stricmp (Line1, "Mass") == 0)
 			{
-				info->Mass = val;
+				info->Mass = (int)val;
 			}
 			else if (stricmp (Line1, "Bits") == 0)
 			{
@@ -2582,11 +2592,15 @@ static int PatchCodePtrs (int dummy)
 			{
 				FString symname;
 
-
 				if ((Line2[0] == 'A' || Line2[0] == 'a') && Line2[1] == '_')
 					symname = Line2;
 				else
 					symname.Format("A_%s", Line2);
+
+				// Hack alert: If A_ConsumeAmmo is used we need to handle the ammo use differently.
+				// Since this is a parameterized code pointer the AmmoPerAttack check cannot find it easily without some help.
+				if (symname.CompareNoCase("A_ConsumeAmmo") == 0)
+					state->StateFlags |= STF_CONSUMEAMMO;
 
 				// Let's consider as aliases some redundant MBF pointer
 				bool ismbfcp = false;
@@ -2744,7 +2758,17 @@ static int PatchText (int oldSize)
 
 	// Search through most other texts
 	const char *str;
-	do
+	
+	// hackhack: If the given string is "Doom", only replace "MUSIC_DOOM".
+	// This is the only music or texture name clashing with common words in the string table.
+	if (!stricmp(oldStr, "Doom"))
+	{
+		str = "MUSIC_DOOM";
+		TableElement te = { LumpFileNum, { newStrData, newStrData, newStrData, newStrData } };
+		DehStrings.Insert(str, te);
+		good = true;
+	}
+	else do
 	{
 		oldStrData.MergeChars(' ');
 		str = EnglishStrings.MatchString(oldStr);
@@ -3565,8 +3589,8 @@ void FinishDehPatch ()
 		}
 		else
 		{
+			bool handled = false;
 			weap->BoolVar(NAME_bDehAmmo) = true;
-			weap->IntVar(NAME_AmmoUse1) = 0;
 			// to allow proper checks in CheckAmmo we have to find the first attack pointer in the Fire sequence
 			// and set its default ammo use as the weapon's AmmoUse1.
 
@@ -3581,24 +3605,38 @@ void FinishDehPatch ()
 					break;	// State has already been checked so we reached a loop
 				}
 				StateVisited[state] = true;
+				if (state->StateFlags & STF_CONSUMEAMMO)
+				{
+					// If A_ConsumeAmmo is being used we have to rely on the existing AmmoUse1 value.
+					handled = true;
+					state->StateFlags &= ~STF_CONSUMEAMMO;
+					break;
+				}
 				for(unsigned j = 0; AmmoPerAttacks[j].func != NAME_None; j++)
 				{
 					if (AmmoPerAttacks[j].ptr == nullptr)
 					{
 						auto p = dyn_cast<PFunction>(wcls->FindSymbol(AmmoPerAttacks[j].func, true));
 						if (p != nullptr) AmmoPerAttacks[j].ptr = p->Variants[0].Implementation;
+						assert(AmmoPerAttacks[j].ptr);
 					}
-					if (state->ActionFunc == AmmoPerAttacks[j].ptr)
+					if (state->ActionFunc == AmmoPerAttacks[j].ptr && AmmoPerAttacks[j].ptr)
 					{
 						found = true;
 						int use = AmmoPerAttacks[j].ammocount;
 						if (use < 0) use = deh.BFGCells;
 						weap->IntVar(NAME_AmmoUse1) = use;
+						handled = true;
 						break;
 					}
 				}
 				if (found) break;
 				state = state->GetNextState();
+			}
+			if (!handled)
+			{
+				weap->IntVar(NAME_AmmoUse1) = 0;
+
 			}
 		}
 	}
@@ -3833,6 +3871,20 @@ void ClearMissile(AActor* info)
 	if (info->BounceFlags & BOUNCE_DEH) info->BounceFlags = BOUNCE_Grenade | BOUNCE_DEH;
 }
 
+void SetShadow(AActor* info)
+{
+	info->flags |= MF_SHADOW;
+	info->RenderStyle = LegacyRenderStyles[STYLE_OptFuzzy];
+	info->renderflags &= ~RF_ZDOOMTRANS;
+}
+
+void ClearShadow(AActor* info)
+{
+	info->flags &= ~MF_SHADOW;
+	info->RenderStyle = LegacyRenderStyles[info->Alpha >= 1 - FLT_EPSILON? STYLE_Normal : STYLE_Translucent];
+	info->renderflags &= ~RF_ZDOOMTRANS;
+}
+
 static FlagHandler flag1handlers[32] = {
 	F(MF_SPECIAL),
 	F(MF_SOLID),
@@ -3852,7 +3904,7 @@ static FlagHandler flag1handlers[32] = {
 	F(MF_TELEPORT),
 	{ SetMissile, ClearMissile, [](AActor* a)->bool { return a->flags & MF_MISSILE; } },
 	F(MF_DROPPED),
-	F(MF_SHADOW),
+	{ SetShadow, ClearShadow, [](AActor* a)->bool { return a->flags & MF_SHADOW; } },
 	F(MF_NOBLOOD),
 	F(MF_CORPSE),
 	F(MF_INFLOAT),
@@ -3865,7 +3917,7 @@ static FlagHandler flag1handlers[32] = {
 	F6(MF6_TOUCHY),
 	{ SetBounces, ClearBounces, [](AActor* a)->bool { return a->BounceFlags & BOUNCE_DEH; } },
 	F(MF_FRIENDLY),
-	{ SetTranslucent, ClearTranslucent, CheckTranslucent }
+	{ SetTranslucent, ClearTranslucent, CheckTranslucent },
 };
 
 static FlagHandler flag2handlers[32] = {

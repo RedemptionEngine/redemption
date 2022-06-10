@@ -101,6 +101,8 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 	int rel = fullbright ? 0 : getExtraLight();
 	auto &vp = di->Viewpoint;
 
+	const bool UseActorLight = (actor && actor->LightLevel > -1);
+
 	if (translucent)
 	{
 		// The translucent pass requires special setup for the various modes.
@@ -240,7 +242,6 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 			// set up the light slice
 			secplane_t *topplane = i == 0 ? &topp : &(*lightlist)[i].plane;
 			secplane_t *lowplane = i == (*lightlist).Size() - 1 ? &bottomp : &(*lightlist)[i + 1].plane;
-
 			int thislight = (*lightlist)[i].caster != nullptr ? hw_ClampLight(*(*lightlist)[i].p_lightlevel) : lightlevel;
 			int thisll = actor == nullptr ? thislight : (uint8_t)actor->Sector->CheckSpriteGlow(thislight, actor->InterpolatedPosition(vp.TicFrac));
 
@@ -702,7 +703,7 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 		return;
 	}
 
-    const auto &vp = di->Viewpoint;
+	const auto &vp = di->Viewpoint;
 	AActor *camera = vp.camera;
 
 	if (thing->renderflags & RF_INVISIBLE || !thing->RenderStyle.IsVisible(thing->Alpha))
@@ -728,17 +729,25 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 	DVector3 thingpos = thing->InterpolatedPosition(vp.TicFrac);
 	if (thruportal == 1) thingpos += di->Level->Displacements.getOffset(thing->Sector->PortalGroup, sector->PortalGroup);
 
-	// Some added checks if the camera actor is not supposed to be seen. It can happen that some portal setup has this actor in view in which case it may not be skipped here
-	if (thing == camera && !vp.showviewer)
+	AActor *viewmaster = thing;
+	if ((thing->flags8 & MF8_MASTERNOSEE) && thing->master != nullptr)
 	{
-		DVector3 thingorigin = thing->Pos();
-		if (thruportal == 1) thingorigin += di->Level->Displacements.getOffset(thing->Sector->PortalGroup, sector->PortalGroup);
-		if (fabs(thingorigin.X - vp.ActorPos.X) < 2 && fabs(thingorigin.Y - vp.ActorPos.Y) < 2) return;
+		viewmaster = thing->master;
+	}
+
+	// Some added checks if the camera actor is not supposed to be seen. It can happen that some portal setup has this actor in view in which case it may not be skipped here
+	if (viewmaster == camera && !vp.showviewer)
+	{
+		DVector3 vieworigin = viewmaster->Pos();
+		if (thruportal == 1) vieworigin += di->Level->Displacements.getOffset(viewmaster->Sector->PortalGroup, sector->PortalGroup);
+		if (fabs(vieworigin.X - vp.ActorPos.X) < 2 && fabs(vieworigin.Y - vp.ActorPos.Y) < 2) return;
 	}
 	// Thing is invisible if close to the camera.
-	if (thing->renderflags & RF_MAYBEINVISIBLE)
+	if (viewmaster->renderflags & RF_MAYBEINVISIBLE)
 	{
-		if (fabs(thingpos.X - vp.Pos.X) < 32 && fabs(thingpos.Y - vp.Pos.Y) < 32) return;
+		DVector3 viewpos = viewmaster->InterpolatedPosition(vp.TicFrac);
+		if (thruportal == 1) viewpos += di->Level->Displacements.getOffset(viewmaster->Sector->PortalGroup, sector->PortalGroup);
+		if (fabs(viewpos.X - vp.Pos.X) < 32 && fabs(viewpos.Y - vp.Pos.Y) < 32) return;
 	}
 
 	// Too close to the camera. This doesn't look good if it is a sprite.
@@ -797,9 +806,9 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 	bottomclip = rendersector->PortalBlocksMovement(sector_t::floor) ? -LARGE_VALUE : rendersector->GetPortalPlaneZ(sector_t::floor);
 
 	uint32_t spritetype = (thing->renderflags & RF_SPRITETYPEMASK);
-	x = thingpos.X;
-	z = thingpos.Z;
-	y = thingpos.Y;
+	x = thingpos.X + thing->WorldOffset.X;
+	z = thingpos.Z + thing->WorldOffset.Z;
+	y = thingpos.Y + thing->WorldOffset.Y;
 	if (spritetype == RF_FACESPRITE) z -= thing->Floorclip; // wall and flat sprites are to be considered di->Level-> geometry so this may not apply.
 
 	// snap shadow Z to the floor
@@ -917,7 +926,7 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 			thing->renderflags ^= RF_XFLIP;
 
 		r.Scale(sprscale.X, isSpriteShadow ? sprscale.Y * 0.15 : sprscale.Y);
-		
+
 		float SpriteOffY = thing->SpriteOffset.Y;
 		float rightfac = -r.left - thing->SpriteOffset.X;
 		float leftfac = rightfac - r.width;
@@ -994,10 +1003,10 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 	fullbright = (thing->flags5 & MF5_BRIGHT) ||
 		((thing->renderflags & RF_FULLBRIGHT) && (!texture || !texture->isFullbrightDisabled()));
 
-	lightlevel = fullbright ? 255 :
-		hw_ClampLight(rendersector->GetTexture(sector_t::ceiling) == skyflatnum ?
-			rendersector->GetCeilingLight() : rendersector->GetFloorLight());
-	foglevel = (uint8_t)clamp<short>(rendersector->lightlevel, 0, 255);
+	if (fullbright)	lightlevel = 255;
+	else lightlevel = hw_ClampLight(thing->GetLightLevel(rendersector));
+
+	foglevel = (uint8_t)clamp<short>(rendersector->lightlevel, 0, 255); // this *must* use the sector's light level or the fog will just look bad.
 
 	lightlevel = rendersector->CheckSpriteGlow(lightlevel, thingpos);
 
@@ -1210,8 +1219,7 @@ void HWSprite::ProcessParticle (HWDrawInfo *di, particle_t *particle, sector_t *
 {
 	if (particle->alpha==0) return;
 
-	lightlevel = hw_ClampLight(sector->GetTexture(sector_t::ceiling) == skyflatnum ? 
-		sector->GetCeilingLight() : sector->GetFloorLight());
+	lightlevel = hw_ClampLight(sector->GetSpriteLight());
 	foglevel = (uint8_t)clamp<short>(sector->lightlevel, 0, 255);
 
 	if (di->isFullbrightScene()) 
@@ -1370,11 +1378,33 @@ void HWDrawInfo::ProcessActorsInPortal(FLinePortalSpan *glport, area_t in_area)
 					DVector3 newpos = savedpos;
 					sector_t fakesector;
 
-					if (!vp.showviewer && th == vp.camera)
+					if (!vp.showviewer)
 					{
-						if (fabs(savedpos.X - vp.ActorPos.X) < 2 && fabs(savedpos.Y - vp.ActorPos.Y) < 2)
+						AActor *viewmaster = th;
+						if ((th->flags8 & MF8_MASTERNOSEE) && th->master != nullptr)
 						{
-							continue;
+							viewmaster = th->master;
+						}
+
+						if (viewmaster == vp.camera)
+						{
+							DVector3 vieworigin = viewmaster->Pos();
+
+							if (fabs(vieworigin.X - vp.ActorPos.X) < 2 && fabs(vieworigin.Y - vp.ActorPos.Y) < 2)
+							{
+								// Same as the original position
+								continue;
+							}
+
+							P_TranslatePortalXY(line, vieworigin.X, vieworigin.Y);
+							P_TranslatePortalZ(line, vieworigin.Z);
+
+							if (fabs(vieworigin.X - vp.ActorPos.X) < 2 && fabs(vieworigin.Y - vp.ActorPos.Y) < 2)
+							{
+								// Same as the translated position
+								// (This is required for MASTERNOSEE actors with 3D models)
+								continue;
+							}
 						}
 					}
 

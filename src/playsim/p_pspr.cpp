@@ -173,7 +173,6 @@ DPSprite::DPSprite(player_t *owner, AActor *caller, int id)
   Tics(0),
   Translation(0),
   Flags(0),
-  Caller(caller),
   Owner(owner),
   State(nullptr),
   Sprite(0),
@@ -181,6 +180,7 @@ DPSprite::DPSprite(player_t *owner, AActor *caller, int id)
   ID(id),
   processPending(true)
 {
+	Caller = caller;
 	baseScale = {1.0, 1.2};
 	rotation = 0.;
 	scale = {1.0, 1.0};
@@ -316,7 +316,7 @@ DPSprite *player_t::GetPSprite(PSPLayers layer)
 		newcaller = ReadyWeapon;
 	}
 
-	if (newcaller == nullptr) return nullptr; // Error case was not handled properly. This function cannot give a guarantee to always succeed!
+	if (newcaller == nullptr || layer == PSP_CALLERID) return nullptr; // Error case was not handled properly. This function cannot give a guarantee to always succeed!
 	
 	DPSprite *pspr = FindPSprite(layer);
 	if (pspr == nullptr)

@@ -102,6 +102,7 @@ struct EventManager;
 typedef TMap<int, int> FDialogueIDMap;				// maps dialogue IDs to dialogue array index (for ACS)
 typedef TMap<FName, int> FDialogueMap;				// maps actor class names to dialogue array index
 typedef TMap<int, FUDMFKeys> FUDMFKeyMap;
+class DIntermissionController;
 
 struct FLevelLocals
 {
@@ -122,6 +123,7 @@ struct FLevelLocals
 
 	friend class MapLoader;
 
+	DIntermissionController* CreateIntermission();
 	void Tick();
 	void Mark();
 	void AddScroller(int secnum);
@@ -538,7 +540,7 @@ public:
 
 	static const int BODYQUESIZE = 32;
 	TObjPtr<AActor*> bodyque[BODYQUESIZE];
-	TObjPtr<DAutomapBase*> automap = nullptr;
+	TObjPtr<DAutomapBase*> automap = MakeObjPtr<DAutomapBase*>(nullptr);
 	int bodyqueslot;
 	
 	// For now this merely points to the global player array, but with this in place, access to this array can be moved over to the level.
@@ -690,10 +692,10 @@ public:
 
 	// links to global game objects
 	TArray<TObjPtr<AActor *>> CorpseQueue;
-	TObjPtr<DFraggleThinker *> FraggleScriptThinker = nullptr;
-	TObjPtr<DACSThinker*> ACSThinker = nullptr;
+	TObjPtr<DFraggleThinker *> FraggleScriptThinker = MakeObjPtr<DFraggleThinker*>(nullptr);
+	TObjPtr<DACSThinker*> ACSThinker = MakeObjPtr<DACSThinker*>(nullptr);
 
-	TObjPtr<DSpotState *> SpotState = nullptr;
+	TObjPtr<DSpotState *> SpotState = MakeObjPtr<DSpotState*>(nullptr);
 
 	//==========================================================================
 	//

@@ -46,7 +46,6 @@
 #include "v_palette.h"
 #include "po_man.h"
 #include "p_effect.h"
-#include "st_start.h"
 #include "v_font.h"
 #include "r_data/colormaps.h"
 #include "p_maputl.h"
@@ -389,7 +388,7 @@ namespace swrenderer
 
 					if (dist1 + dist2 < distp + 1)
 					{
-						viewpoint.camera->renderflags |= RF_INVISIBLE;
+						viewpoint.camera->renderflags |= RF_MAYBEINVISIBLE;
 					}
 				}
 			}
