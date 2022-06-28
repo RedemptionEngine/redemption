@@ -205,6 +205,7 @@ void AActor::Serialize(FSerializer &arc)
 		A("scale", Scale)
 		A("renderstyle", RenderStyle)
 		A("renderflags", renderflags)
+		A("renderflags2", renderflags2)
 		A("picnum", picnum)
 		A("floorpic", floorpic)
 		A("ceilingpic", ceilingpic)
@@ -6840,6 +6841,7 @@ AActor *P_SpawnPlayerMissile (AActor *source, double x, double y, double z,
 	{
 		return nullptr;
 	}
+	aimflags &= ~ALF_IGNORENOAUTOAIM; // just to be safe.
 
 	static const double angdiff[3] = { -5.625, 5.625, 0 };
 	DAngle an = angle;
