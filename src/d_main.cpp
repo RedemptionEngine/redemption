@@ -3539,6 +3539,8 @@ static int D_DoomMain_Internal (void)
 	
 	std::set_new_handler(NewFailure);
 	const char *batchout = Args->CheckValue("-errorlog");
+
+	D_DoomInit();
 	
 	// [RH] Make sure zdoom.pk3 is always loaded,
 	// as it contains magic stuff we need.
@@ -3571,9 +3573,7 @@ static int D_DoomMain_Internal (void)
 		Printf("\n");
 	}
 
-	if (!batchrun) Printf(PRINT_LOG, "%s version %s\n", GAMENAME, GetVersionString());
-
-	D_DoomInit();
+	Printf("%s version %s\n", GAMENAME, GetVersionString());
 
 	extern void D_ConfirmSendStats();
 	D_ConfirmSendStats();

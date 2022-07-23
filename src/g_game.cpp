@@ -78,6 +78,7 @@
 #include "s_music.h"
 #include "p_setup.h"
 #include "d_event.h"
+#include "model.h"
 
 #include "v_video.h"
 #include "g_hub.h"
@@ -116,7 +117,7 @@ CVAR(Bool, save_formatted, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)	// use forma
 CVAR (Int, deathmatch, 0, CVAR_SERVERINFO|CVAR_LATCH);
 CVAR (Bool, chasedemo, false, 0);
 CVAR (Bool, storesavepic, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
-CVAR (Bool, longsavemessages, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Bool, longsavemessages, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR (String, save_dir, "", CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 CVAR (Bool, cl_waitforsave, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR (Bool, enablescriptscreenshot, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
@@ -2118,6 +2119,14 @@ void G_DoLoadGame ()
 		level.info->Snapshot.Clean();
 
 	BackupSaveName = savename;
+
+	//Push any added models from A_ChangeModel
+	for (int i = 0; i < savedModelFiles.Size(); i++)
+	{
+		FString modelFilePath = savedModelFiles[i].Left(savedModelFiles[i].LastIndexOf("/")+1);
+		FString modelFileName = savedModelFiles[i].Right(savedModelFiles[i].Len() - savedModelFiles[i].Left(savedModelFiles[i].LastIndexOf("/") + 1).Len());
+		FindModel(modelFilePath, modelFileName);
+	}
 
 	// At this point, the GC threshold is likely a lot higher than the
 	// amount of memory in use, so bring it down now by starting a
