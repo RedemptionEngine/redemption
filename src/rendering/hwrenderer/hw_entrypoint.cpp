@@ -41,6 +41,7 @@
 #include "v_palette.h"
 #include "d_main.h"
 #include "g_cvars.h"
+#include "v_draw.h"
 
 #include "hw_lightbuffer.h"
 #include "hw_cvars.h"
@@ -283,12 +284,10 @@ void WriteSavePic(player_t* player, FileWriter* file, int width, int height)
 		RenderState.EnableStencil(false);
 		RenderState.SetNoSoftLightLevel();
 
-		int numpixels = width * height;
-		uint8_t* scr = (uint8_t*)M_Malloc(numpixels * 3);
-		screen->CopyScreenToBuffer(width, height, scr);
+		TArray<uint8_t> scr(width * height * 3, true);
+		screen->CopyScreenToBuffer(width, height, scr.Data());
 
-		DoWriteSavePic(file, SS_RGB, scr, width, height, viewsector, screen->FlipSavePic());
-		M_Free(scr);
+		DoWriteSavePic(file, SS_RGB, scr.Data(), width, height, viewsector, screen->FlipSavePic());
 
 		// Switch back the screen render buffers
 		screen->SetViewportRects(nullptr);
@@ -350,6 +349,21 @@ sector_t* RenderView(player_t* player)
 		// Shader start time does not need to be handled per level. Just use the one from the camera to render from.
 		if (player->camera)
 			CheckTimer(*RenderState, player->camera->Level->ShaderStartTime);
+
+		// Draw all canvases that changed
+		for (FCanvas* canvas : AllCanvases)
+		{
+			if (canvas->Tex->CheckNeedsUpdate())
+			{
+				screen->RenderTextureView(canvas->Tex, [=](IntRect& bounds)
+					{
+						Draw2D(&canvas->Drawer, *screen->RenderState(), 0, 0, canvas->Tex->GetWidth(), canvas->Tex->GetHeight());
+						canvas->Drawer.Clear();
+					});
+				canvas->Tex->SetUpdated(true);
+			}
+		}
+
 		// prepare all camera textures that have been used in the last frame.
 		// This must be done for all levels, not just the primary one!
 		for (auto Level : AllLevels())
