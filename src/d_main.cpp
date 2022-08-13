@@ -209,6 +209,8 @@ static const char* iwad_folders[] = { "flats/", "textures/", "hires/", "sprites/
 static const char* iwad_reserved[] = { "mapinfo", "zmapinfo", "umapinfo", "gameinfo", "sndinfo", "sndseq", "sbarinfo", "menudef", "gldefs", "animdefs", "decorate", "zscript", "iwadinfo", "maps/" };
 
 
+EXTERN_CVAR(Float, net_timescale)
+
 CUSTOM_CVAR(Float, i_timescale, 1.0f, CVAR_NOINITCALL | CVAR_VIRTUAL)
 {
 	if (netgame)
@@ -218,6 +220,13 @@ CUSTOM_CVAR(Float, i_timescale, 1.0f, CVAR_NOINITCALL | CVAR_VIRTUAL)
 	}
 	else if (self >= 0.05f)
 	{
+		if (net_timescale != 1.0)
+		{
+			self.DisableCallbacks();
+			net_timescale = 1.0;
+			self.EnableCallbacks();
+		}
+
 		I_FreezeTime(true);
 		TimeScale = self;
 		I_FreezeTime(false);
@@ -225,6 +234,28 @@ CUSTOM_CVAR(Float, i_timescale, 1.0f, CVAR_NOINITCALL | CVAR_VIRTUAL)
 	else
 	{
 		Printf("Time scale must be at least 0.05!\n");
+	}
+}
+
+CUSTOM_CVAR(Float, net_timescale, 1.0, CVAR_NOINITCALL | CVAR_VIRTUAL | CVAR_SERVERINFO)
+{
+	if (self >= 0.1f && self <= 10.0)
+	{
+		if (i_timescale != 1.0)
+		{
+			self.DisableCallbacks();
+			i_timescale = 1.0;
+			self.EnableCallbacks();
+		}
+
+		I_FreezeTime(true);
+		TimeScale = self;
+		I_FreezeTime(false);
+	}
+	else
+	{
+		self = 1.0f;
+		Printf("Time scale must be between 0.1 and 10.0!\n");
 	}
 }
 
