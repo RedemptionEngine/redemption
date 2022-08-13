@@ -237,7 +237,7 @@ CUSTOM_CVAR(Float, i_timescale, 1.0f, CVAR_NOINITCALL | CVAR_VIRTUAL)
 	}
 }
 
-CUSTOM_CVAR(Float, net_timescale, 1.0, CVAR_NOINITCALL | CVAR_VIRTUAL | CVAR_SERVERINFO)
+CUSTOM_CVAR(Float, net_timescale, 1.0, CVAR_NOINITCALL | CVAR_VIRTUAL | CVAR_SERVERINFO | CVAR_CHEAT)
 {
 	if (self >= 0.1f && self <= 10.0)
 	{
