@@ -68,7 +68,7 @@ const char * ZCCCompiler::GetStringConst(FxExpression *ex, FCompileContext &ctx)
 
 int ZCCCompiler::IntConstFromNode(ZCC_TreeNode *node, PContainerType *cls)
 {
-	FCompileContext ctx(OutNamespace, cls, false);
+	FCompileContext ctx(OutNamespace, cls, false, mVersion);
 	FxExpression *ex = new FxIntCast(ConvertNode(node), false);
 	ex = ex->Resolve(ctx);
 	if (ex == nullptr) return 0;
@@ -82,7 +82,7 @@ int ZCCCompiler::IntConstFromNode(ZCC_TreeNode *node, PContainerType *cls)
 
 FString ZCCCompiler::StringConstFromNode(ZCC_TreeNode *node, PContainerType *cls)
 {
-	FCompileContext ctx(OutNamespace, cls, false);
+	FCompileContext ctx(OutNamespace, cls, false, mVersion);
 	FxExpression *ex = new FxStringCast(ConvertNode(node));
 	ex = ex->Resolve(ctx);
 	if (ex == nullptr) return "";
@@ -1144,7 +1144,7 @@ void ZCCCompiler::AddConstant(ZCC_ConstantWork &constant)
 
 bool ZCCCompiler::CompileConstant(ZCC_ConstantWork *work)
 {
-	FCompileContext ctx(OutNamespace, work->cls, false);
+	FCompileContext ctx(OutNamespace, work->cls, false, mVersion);
 	FxExpression *exp = ConvertNode(work->node->Value);
 	try
 	{
@@ -1185,7 +1185,7 @@ void ZCCCompiler::CompileArrays(ZCC_StructWork *work)
 		ConvertNodeList(values, sas->Values);
 
 		bool fail = false;
-		FCompileContext ctx(OutNamespace, work->Type(), false);
+		FCompileContext ctx(OutNamespace, work->Type(), false, mVersion);
 
 		char *destmem = (char *)ClassDataAllocator.Alloc(values.Size() * ztype->Align);
 		memset(destmem, 0, values.Size() * ztype->Align);
@@ -1813,7 +1813,7 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 			{
 				Error(field, "%s: @ not allowed for user scripts", name.GetChars());
 			}
-			retval = ResolveUserType(btype, outertype? &outertype->Symbols : nullptr, true);
+			retval = ResolveUserType(btype, btype->UserType, outertype? &outertype->Symbols : nullptr, true);
 			break;
 
 		case ZCC_UserType:
@@ -1837,7 +1837,7 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 				break;
 
 			default:
-				retval = ResolveUserType(btype, outertype ? &outertype->Symbols : nullptr, false);
+				retval = ResolveUserType(btype, btype->UserType, outertype ? &outertype->Symbols : nullptr, false);
 				break;
 			}
 			break;
@@ -1936,18 +1936,25 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 //
 // ZCCCompiler :: ResolveUserType
 //
-// resolves a user type and returns a matching PType
-//
 //==========================================================================
 
-PType *ZCCCompiler::ResolveUserType(ZCC_BasicType *type, PSymbolTable *symt, bool nativetype)
+/**
+* Resolves a user type and returns a matching PType.
+*
+* @param type The tree node with the identifiers to look for.
+* @param type The current identifier being looked for. This must be in type's UserType list.
+* @param symt The symbol table to search in. If id is the first identifier and not found in symt, then OutNamespace will also be searched.
+* @param nativetype Distinguishes between searching for a native type or a user type.
+* @returns the PType found for this user type
+*/
+PType *ZCCCompiler::ResolveUserType(ZCC_BasicType *type, ZCC_Identifier *id, PSymbolTable *symt, bool nativetype)
 {
 	// Check the symbol table for the identifier.
 	PSymbol *sym = nullptr;
 
 	// We first look in the current class and its parents, and then in the current namespace and its parents.
-	if (symt != nullptr) sym = symt->FindSymbol(type->UserType->Id, true);
-	if (sym == nullptr) sym = OutNamespace->Symbols.FindSymbol(type->UserType->Id, true);
+	if (symt != nullptr) sym = symt->FindSymbol(id->Id, true);
+	if (sym == nullptr && type->UserType == id) sym = OutNamespace->Symbols.FindSymbol(id->Id, true);
 	if (sym != nullptr && sym->IsKindOf(RUNTIME_CLASS(PSymbolType)))
 	{
 		auto ptype = static_cast<PSymbolType *>(sym)->Type;
@@ -1955,6 +1962,21 @@ PType *ZCCCompiler::ResolveUserType(ZCC_BasicType *type, PSymbolTable *symt, boo
 		{
 			Error(type, "Type %s not accessible to ZScript version %d.%d.%d", FName(type->UserType->Id).GetChars(), mVersion.major, mVersion.minor, mVersion.revision);
 			return TypeError;
+		}
+
+		if (id->SiblingNext != type->UserType)
+		{
+			assert(id->SiblingNext->NodeType == AST_Identifier);
+			ptype = ResolveUserType(
+				type,
+				static_cast<ZCC_Identifier *>(id->SiblingNext),
+				&ptype->Symbols,
+				nativetype
+			);
+			if (ptype == TypeError)
+			{
+				return ptype;
+			}
 		}
 
 		if (ptype->isEnum())
@@ -1972,10 +1994,35 @@ PType *ZCCCompiler::ResolveUserType(ZCC_BasicType *type, PSymbolTable *symt, boo
 		}
 		if (!nativetype) return ptype;
 	}
-	Error(type, "Unable to resolve %s%s as type.", nativetype? "@" : "", FName(type->UserType->Id).GetChars());
+	Error(type, "Unable to resolve %s%s as a type.", nativetype? "@" : "", UserTypeName(type).GetChars());
 	return TypeError;
 }
 
+
+//==========================================================================
+//
+// ZCCCompiler :: UserTypeName										STATIC
+//
+// Returns the full name for a UserType node.
+// 
+//==========================================================================
+
+FString ZCCCompiler::UserTypeName(ZCC_BasicType *type)
+{
+	FString out;
+	ZCC_Identifier *id = type->UserType;
+
+	do
+	{
+		assert(id->NodeType == AST_Identifier);
+		if (out.Len() > 0)
+		{
+			out += '.';
+		}
+		out += FName(id->Id).GetChars();
+	} while ((id = static_cast<ZCC_Identifier *>(id->SiblingNext)) != type->UserType);
+	return out;
+}
 
 //==========================================================================
 //
@@ -2014,7 +2061,7 @@ PType *ZCCCompiler::ResolveArraySize(PType *baseType, ZCC_Expression *arraysize,
 		indices = std::move(fixedIndices);
 	}
 
-	FCompileContext ctx(OutNamespace, cls, false);
+	FCompileContext ctx(OutNamespace, cls, false, mVersion);
 	for (auto index : indices)
 	{
 		// There is no float->int casting here.
@@ -2318,7 +2365,11 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 					}
 					if (type->GetRegType() == REGT_NIL && type != TypeVector2 && type != TypeVector3 && type != TypeFVector2 && type != TypeFVector3)
 					{
-						Error(p, "Invalid type %s for function parameter", type->DescriptiveName());
+						// If it's TypeError, then an error was already given
+						if (type != TypeError)
+						{
+							Error(p, "Invalid type %s for function parameter", type->DescriptiveName());
+						}
 					}
 					else if (p->Default != nullptr)
 					{
@@ -2347,7 +2398,7 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 
 
 						FxExpression *x = new FxTypeCast(ConvertNode(p->Default), type, false);
-						FCompileContext ctx(OutNamespace, c->Type(), false);
+						FCompileContext ctx(OutNamespace, c->Type(), false, mVersion);
 						x = x->Resolve(ctx);
 
 						if (x != nullptr)
