@@ -54,6 +54,7 @@
 #include <process.h>
 #include <time.h>
 #include <map>
+#include <codecvt>
 
 #include <stdarg.h>
 
@@ -960,20 +961,49 @@ void I_SetThreadNumaNode(std::thread &thread, int numaNode)
 	}
 }
 
-void I_OpenShellFolder(const char* folder)
+void I_OpenShellFolder(const char* infolder)
 {
-	FString proc = folder;
-	proc.ReplaceChars('/', '\\');
-	Printf("Opening folder: %s\n", proc.GetChars());
-	ShellExecuteW(NULL, L"open", L"explorer.exe", proc.WideString().c_str(), NULL, SW_SHOWNORMAL);
+	LPWSTR curdir = new wchar_t[MAX_PATH];
+	if (!GetCurrentDirectoryW(MAX_PATH, curdir))
+	{
+		Printf ("Current path too long\n");
+		return;
+	}
+	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+	std::wstring folder = converter.from_bytes(infolder);
+	SetCurrentDirectoryW(folder.c_str());
+	Printf("Opening folder: %s\n", infolder);
+	ShellExecuteW(NULL, L"open", L"explorer.exe", L".", NULL, SW_SHOWNORMAL);
+	SetCurrentDirectoryW(curdir);
+	delete curdir;
 }
 
 void I_OpenShellFile(const char* file)
 {
-	FString proc = file;
-	proc.ReplaceChars('/', '\\');
-	Printf("Opening folder to file: %s\n", proc.GetChars());
-	proc.Format("/select,%s", proc.GetChars());
-	ShellExecuteW(NULL, L"open", L"explorer.exe", proc.WideString().c_str(), NULL, SW_SHOWNORMAL);
+	LPWSTR curdir = new wchar_t[MAX_PATH];
+	if (!GetCurrentDirectoryW(MAX_PATH, curdir))
+	{
+		Printf ("Current path too long\n");
+		return;
+	}
+
+	std::string infolder = file;
+	std::string toreplace = "\\";
+	std::string replacewith = "/";
+	std::size_t pos = infolder.find(toreplace);
+	while(pos != std::string::npos)
+	{
+		infolder.replace(pos, toreplace.length(), replacewith);
+		pos = infolder.find(toreplace);
+	}
+	infolder.erase(infolder.find_last_of('/'), std::string::npos);
+
+	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+	std::wstring folder = converter.from_bytes(infolder);
+	SetCurrentDirectoryW(folder.c_str());
+	Printf("Opening folder: %s\n", infolder.c_str());
+	ShellExecuteW(NULL, L"open", L"explorer.exe", L".", NULL, SW_SHOWNORMAL);
+	SetCurrentDirectoryW(curdir);
+	delete curdir;
 }
 
