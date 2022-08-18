@@ -171,35 +171,25 @@ unsigned int I_MakeRNGSeed()
 	return static_cast<unsigned int>(arc4random());
 }
 
-void I_OpenShellFolder(const char* folder)
+FString I_GetCWD()
 {
-	char curdir[256];
-	if (!getcwd (curdir, countof(curdir)))
-	{
-		Printf ("Current path too long\n");
-		return;
-	}
-
-	chdir(folder);
-	Printf("Opening folder: %s\n", folder);
-	std::system("open .");
-	chdir(curdir);
+	NSString *currentpath = [[NSFileManager defaultManager] currentDirectoryPath];
+	return currentpath.UTF8String;
 }
 
-void I_OpenShellFile(const char* file)
+bool I_ChDir(const char* path)
 {
-	char curdir[256];
-	if (!getcwd (curdir, countof(curdir)))
-	{
-		Printf ("Current path too long\n");
-		return;
-	}
+	return [[NSFileManager defaultManager] changeCurrentDirectoryPath:[NSString stringWithUTF8String:path]];
+}
 
-	std::string folder = file;
-	folder.erase(folder.find_last_of('/'), std::string::npos);
-	chdir(folder.c_str());
-	Printf("Opening folder: %s\n", folder.c_str());
+void I_OpenShellFolder(const char* folder)
+{
+	NSFileManager *filemgr = [NSFileManager defaultManager];
+	NSString *currentpath = [filemgr currentDirectoryPath];
+
+	[filemgr changeCurrentDirectoryPath:[NSString stringWithUTF8String:folder]];
+	Printf("Opening folder: %s\n", folder);
 	std::system("open .");
-	chdir(curdir);
+	[filemgr changeCurrentDirectoryPath:currentpath];
 }
 

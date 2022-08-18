@@ -961,49 +961,42 @@ void I_SetThreadNumaNode(std::thread &thread, int numaNode)
 	}
 }
 
-void I_OpenShellFolder(const char* infolder)
+FString I_GetCWD()
 {
-	LPWSTR curdir = new wchar_t[MAX_PATH];
-	if (!GetCurrentDirectoryW(MAX_PATH, curdir))
+	auto len = GetCurrentDirectoryW(0, nullptr);
+	TArray<wchar_t> curdir(len + 1, true);
+	if (!GetCurrentDirectoryW(len + 1, curdir.Data()))
 	{
-		Printf ("Current path too long\n");
-		return;
+		return "";
 	}
-	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-	std::wstring folder = converter.from_bytes(infolder);
-	SetCurrentDirectoryW(folder.c_str());
-	Printf("Opening folder: %s\n", infolder);
-	ShellExecuteW(NULL, L"open", L"explorer.exe", L".", NULL, SW_SHOWNORMAL);
-	SetCurrentDirectoryW(curdir);
-	delete curdir;
+	FString returnv(curdir.Data());
+	FixPathSeperator(returnv);
+	return returnv;
 }
 
-void I_OpenShellFile(const char* file)
+bool I_ChDir(const char* path)
 {
-	LPWSTR curdir = new wchar_t[MAX_PATH];
-	if (!GetCurrentDirectoryW(MAX_PATH, curdir))
-	{
-		Printf ("Current path too long\n");
-		return;
-	}
+	return SetCurrentDirectoryW(WideString(path).c_str());
+}
 
-	std::string infolder = file;
-	std::string toreplace = "\\";
-	std::string replacewith = "/";
-	std::size_t pos = infolder.find(toreplace);
-	while(pos != std::string::npos)
-	{
-		infolder.replace(pos, toreplace.length(), replacewith);
-		pos = infolder.find(toreplace);
-	}
-	infolder.erase(infolder.find_last_of('/'), std::string::npos);
 
-	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-	std::wstring folder = converter.from_bytes(infolder);
-	SetCurrentDirectoryW(folder.c_str());
-	Printf("Opening folder: %s\n", infolder.c_str());
-	ShellExecuteW(NULL, L"open", L"explorer.exe", L".", NULL, SW_SHOWNORMAL);
-	SetCurrentDirectoryW(curdir);
-	delete curdir;
+void I_OpenShellFolder(const char* infolder)
+{
+	auto len = GetCurrentDirectoryW(0, nullptr);
+	TArray<wchar_t> curdir(len + 1, true);
+	if (!GetCurrentDirectoryW(len + 1, curdir.Data()))
+	{
+		Printf("Unable to retrieve current directory\n");
+	}
+	else if (SetCurrentDirectoryW(WideString(infolder).c_str()))
+	{
+		Printf("Opening folder: %s\n", infolder);
+		ShellExecuteW(NULL, L"open", L"explorer.exe", L".", NULL, SW_SHOWNORMAL);
+		SetCurrentDirectoryW(curdir.Data());
+	}
+	else
+	{
+		Printf("Unable to open directory '%s\n", infolder);
+	}
 }
 
