@@ -343,6 +343,7 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(MF8, CROSSLINECHECK, AActor, flags8),
 	DEFINE_FLAG(MF8, MASTERNOSEE, AActor, flags8),
 	DEFINE_FLAG(MF8, ADDLIGHTLEVEL, AActor, flags8),
+	DEFINE_FLAG(MF8, ONLYSLAMSOLID, AActor, flags8),
 
 	// Effect flags
 	DEFINE_FLAG(FX, VISIBILITYPULSE, AActor, effects),
@@ -805,7 +806,7 @@ void SynthesizeFlagFields()
 DEFINE_ACTION_FUNCTION(DObject, BAM)
 {
 	PARAM_PROLOGUE;
-	PARAM_FLOAT(ang);
-	ACTION_RETURN_INT(DAngle(ang).BAMs());
+	PARAM_ANGLE(ang);
+	ACTION_RETURN_INT(ang.BAMs());
 }
 

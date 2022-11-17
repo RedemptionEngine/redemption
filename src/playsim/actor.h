@@ -47,6 +47,7 @@
 #include "g_level.h"
 #include "tflags.h"
 #include "portal.h"
+#include "bonecomponents.h"
 
 struct subsector_t;
 struct FBlockNode;
@@ -428,6 +429,7 @@ enum ActorFlag8
 	MF8_CROSSLINECHECK	= 0x10000000,	// [MC]Enables CanCrossLine virtual
 	MF8_MASTERNOSEE		= 0x20000000,	// Don't show object in first person if their master is the current camera.
 	MF8_ADDLIGHTLEVEL	= 0x40000000,	// [MC] Actor light level is additive with sector.
+	MF8_ONLYSLAMSOLID	= 0x80000000,	// [B] Things with skullfly will ignore non-solid Actors.
 };
 
 // --- mobj.renderflags ---
@@ -682,6 +684,7 @@ public:
 	TArray<int>			modelIDs;
 	TArray<FTextureID>	skinIDs;
 	TArray<FTextureID>	surfaceSkinIDs;
+	TArray<int>			animationIDs;
 	TArray<int>			modelFrameGenerators;
 
 	DActorModelData() = default;
@@ -721,15 +724,15 @@ public:
 const double MinVel = EQUAL_EPSILON;
 
 // Map Object definition.
-class AActor : public DThinker
+class AActor final : public DThinker
 {
 	DECLARE_CLASS_WITH_META (AActor, DThinker, PClassActor)
 	HAS_OBJECT_POINTERS
 public:
 	AActor() = default;
 	AActor(const AActor &other) = delete;	// Calling this would be disastrous.
-	AActor &operator= (const AActor &other);
-	~AActor ();
+	AActor &operator= (const AActor &other) = delete;
+	~AActor () = default;
 
 	virtual void OnDestroy() override;
 	virtual void Serialize(FSerializer &arc) override;
@@ -794,7 +797,6 @@ public:
 	bool CallSlam(AActor *victim);
 
 	// Something just touched this actor.
-	virtual void Touch(AActor *toucher);
 	void CallTouch(AActor *toucher);
 
 	// Apply gravity and/or make actor sink in water.
@@ -807,6 +809,9 @@ public:
 
 	// plays bouncing sound
 	void PlayBounceSound(bool onfloor);
+
+	// plays pushing sound
+	void PlayPushSound();
 
 	// Called when an actor with MF_MISSILE and MF2_FLOORBOUNCE hits the floor
 	bool FloorBounceMissile (secplane_t &plane);
@@ -835,9 +840,6 @@ public:
 	// Tosses an item out of the inventory.
 	AActor *DropInventory (AActor *item, int amt = -1);
 
-	// Removes all items from the inventory.
-	void ClearInventory();
-
 	// Returns true if this view is considered "local" for the player.
 	bool CheckLocalView() const;
 
@@ -851,9 +853,6 @@ public:
 
 	// Adds one item of a particular type. Returns NULL if it could not be added.
 	AActor *GiveInventoryType (PClassActor *type);
-
-	// Destroys all the inventory the actor is holding.
-	void DestroyAllInventory ();
 
 	// Set the alphacolor field properly
 	void SetShade (uint32_t rgb);
@@ -872,7 +871,6 @@ public:
 	bool Massacre ();
 
 	// Transforms the actor into a finely-ground paste
-	bool Grind(bool items);
 	bool CallGrind(bool items);
 
 	// Get this actor's team
@@ -1084,6 +1082,7 @@ public:
 	double			Speed;
 	double			FloatSpeed;
 	TObjPtr<DActorModelData*>		modelData;
+	TObjPtr<DBoneComponents*>		boneComponentData;
 
 // interaction info
 	FBlockNode		*BlockNode;			// links in blocks (if needed)
@@ -1200,6 +1199,8 @@ public:
 	sector_t		*BlockingCeiling;	// Sector that blocked the last move (ceiling plane slope)
 	sector_t		*BlockingFloor;		// Sector that blocked the last move (floor plane slope)
 
+	uint32_t		freezetics;	// actor has actions completely frozen (including movement) for this many tics, but they still get Tick() calls
+
 	int PoisonDamage; // Damage received per tic from poison.
 	FName PoisonDamageType; // Damage type dealt by poison.
 	int PoisonDuration; // Duration left for receiving poison damage.
@@ -1305,11 +1306,9 @@ public:
 	void UnlinkFromWorld(FLinkContext *ctx);
 	void AdjustFloorClip ();
 	bool IsMapActor();
-	int GetTics(FState * newstate);
 	bool SetState (FState *newstate, bool nofunction=false);
-	double UpdateWaterDepth(bool splash);
-	virtual void SplashCheck();
-	virtual bool UpdateWaterLevel (bool splash=true);
+	void SplashCheck();
+	bool UpdateWaterLevel (bool splash=true);
 	bool isFast();
 	bool isSlow();
 	void SetIdle(bool nofunction=false);
@@ -1542,7 +1541,6 @@ public:
 
 	bool				hasmodel;
 
-	void PlayerLandedMakeGruntSound(AActor* onmobj);
 };
 
 class FActorIterator

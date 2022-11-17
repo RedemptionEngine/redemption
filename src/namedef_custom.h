@@ -347,6 +347,8 @@ xx(Greetings)
 xx(Idle)
 xx(GenericFreezeDeath)
 xx(GenericCrush)
+xx(DieFromSpawn)
+xx(Slam)
 
 // Bounce state names
 xx(Bounce)
@@ -479,7 +481,7 @@ xx(ResolveState)
 
 // UDMF keywords (todo: take these out of the global name table
 xx(Alpha)
-xx(Angle)
+//xx(Angle)
 xx(Args)
 xx(CeilingZ)
 xx(FloorZ)
@@ -524,6 +526,7 @@ xx(ExplosionDamage)
 xx(ExplosionRadius)
 xx(DontHurtShooter)
 xx(Noattack)
+xx(PushSound)
 
 //xx(X)
 //xx(Y)

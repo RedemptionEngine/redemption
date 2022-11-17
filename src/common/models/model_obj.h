@@ -6,7 +6,7 @@
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 2 of the License, or
 // (at your option) any later version.
 //
 // This program is distributed in the hope that it will be useful,
@@ -98,7 +98,7 @@ public:
 	~FOBJModel();
 	bool Load(const char* fn, int lumpnum, const char* buffer, int length) override;
 	int FindFrame(const char* name, bool nodefault) override;
-	void RenderFrame(FModelRenderer* renderer, FGameTexture* skin, int frame, int frame2, double inter, int translation, const FTextureID* surfaceskinids) override;
+	void RenderFrame(FModelRenderer* renderer, FGameTexture* skin, int frame, int frame2, double inter, int translation, const FTextureID* surfaceskinids, const TArray<VSMatrix>& boneData, int boneStartPosition) override;
 	void BuildVertexBuffer(FModelRenderer* renderer) override;
 	void AddSkins(uint8_t* hitlist, const FTextureID* surfaceskinids) override;
 };

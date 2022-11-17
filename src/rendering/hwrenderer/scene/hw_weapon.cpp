@@ -140,7 +140,7 @@ static bool isBright(DPSprite *psp)
 	if (psp != nullptr && psp->GetState() != nullptr)
 	{
 		bool disablefullbright = false;
-		FTextureID lump = sprites[psp->GetSprite()].GetSpriteFrame(psp->GetFrame(), 0, 0., nullptr);
+		FTextureID lump = sprites[psp->GetSprite()].GetSpriteFrame(psp->GetFrame(), 0, nullAngle, nullptr);
 		if (lump.isValid())
 		{
 			auto tex = TexMan.GetGameTexture(lump, true);
@@ -416,7 +416,7 @@ bool HUDSprite::GetWeaponRect(HWDrawInfo *di, DPSprite *psp, float sx, float sy,
 
 	// decide which patch to use
 	bool mirror;
-	FTextureID lump = sprites[psp->GetSprite()].GetSpriteFrame(psp->GetFrame(), 0, 0., &mirror);
+	FTextureID lump = sprites[psp->GetSprite()].GetSpriteFrame(psp->GetFrame(), 0, nullAngle, &mirror);
 	if (!lump.isValid()) return false;
 
 	auto tex = TexMan.GetGameTexture(lump, false);
@@ -486,7 +486,7 @@ bool HUDSprite::GetWeaponRect(HWDrawInfo *di, DPSprite *psp, float sx, float sy,
 		const float cx = (flip) ? -psp->Coord[i].X : psp->Coord[i].X;
 		Vert.v[i] += FVector2(cx * scalex, psp->Coord[i].Y * scale);
 	}
-	if (psp->rotation != 0.0 || !psp->scale.isZero())
+	if (psp->rotation != nullAngle || !psp->scale.isZero())
 	{
 		// [MC] Sets up the alignment for starting the pivot at, in a corner.
 		float anchorx, anchory;
@@ -508,7 +508,7 @@ bool HUDSprite::GetWeaponRect(HWDrawInfo *di, DPSprite *psp, float sx, float sy,
 		// Handle PSPF_FLIP.
 		if (flip) anchorx = 1.0 - anchorx;
 
-		FAngle rot = float((flip) ? -psp->rotation.Degrees : psp->rotation.Degrees);
+		FAngle rot = FAngle::fromDeg(float((flip) ? -psp->rotation.Degrees() : psp->rotation.Degrees()));
 		const float cosang = rot.Cos();
 		const float sinang = rot.Sin();
 		
@@ -619,7 +619,7 @@ void HWDrawInfo::PreparePlayerSprites(sector_t * viewsector, area_t in_area)
 	for (DPSprite *psp = player->psprites; psp != nullptr && psp->GetID() < PSP_TARGETCENTER; psp = psp->GetNext())
 	{
 		if (!psp->GetState()) continue;
-		FSpriteModelFrame *smf = psp->Caller != nullptr ? FindModelFrame(psp->Caller->GetClass(), psp->GetSprite(), psp->GetFrame(), false) : nullptr;
+		FSpriteModelFrame *smf = psp->Caller != nullptr ? FindModelFrame(psp->Caller->modelData != nullptr ? psp->Caller->modelData->modelDef != NAME_None ? PClass::FindActor(psp->Caller->modelData->modelDef) : psp->Caller->GetClass() : psp->Caller->GetClass(), psp->GetSprite(), psp->GetFrame(), false) : nullptr;
 		// This is an 'either-or' proposition. This maybe needs some work to allow overlays with weapon models but as originally implemented this just won't work.
 		if (smf && !hudModelStep) continue;
 		if (!smf && hudModelStep) continue;

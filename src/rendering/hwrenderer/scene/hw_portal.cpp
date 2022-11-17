@@ -415,7 +415,7 @@ void HWScenePortalBase::ClearClipper(HWDrawInfo *di, Clipper *clipper)
 		DAngle startAngle = (DVector2(lines[i].glseg.x2, lines[i].glseg.y2) - outer_di->Viewpoint.Pos).Angle() + angleOffset;
 		DAngle endAngle = (DVector2(lines[i].glseg.x1, lines[i].glseg.y1) - outer_di->Viewpoint.Pos).Angle() + angleOffset;
 
-		if (deltaangle(endAngle, startAngle) < 0)
+		if (deltaangle(endAngle, startAngle) < nullAngle)
 		{
 			clipper->SafeRemoveClipRangeRealAngles(startAngle.BAMs(), endAngle.BAMs());
 		}
@@ -779,6 +779,11 @@ void HWSectorStackPortal::SetupCoverage(HWDrawInfo *di)
 bool HWSectorStackPortal::Setup(HWDrawInfo *di, FRenderState &rstate, Clipper *clipper)
 {
 	auto state = mState;
+	if (state->renderdepth > 100) // energency abort in case a map manages to set up a recursion.
+	{
+		return false;
+	}
+
 	FSectorPortalGroup *portal = origin;
 	auto &vp = di->Viewpoint;
 

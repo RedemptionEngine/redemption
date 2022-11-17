@@ -133,6 +133,7 @@ bool FMD3Model::Load(const char * path, int lumpnum, const char * buffer, int le
 
 	auto numFrames = LittleLong(hdr->Num_Frames);
 	auto numSurfaces = LittleLong(hdr->Num_Surfaces);
+	hasSurfaces = numSurfaces > 1;
 
 	numTags = LittleLong(hdr->Num_Tags);
 
@@ -328,7 +329,7 @@ void FMD3Model::AddSkins(uint8_t *hitlist, const FTextureID* surfaceskinids)
 //
 //===========================================================================
 
-int FMD3Model::FindFrame(const char * name, bool nodefault)
+int FMD3Model::FindFrame(const char* name, bool nodefault)
 {
 	for (unsigned i = 0; i < Frames.Size(); i++)
 	{
@@ -343,7 +344,7 @@ int FMD3Model::FindFrame(const char * name, bool nodefault)
 //
 //===========================================================================
 
-void FMD3Model::RenderFrame(FModelRenderer *renderer, FGameTexture * skin, int frameno, int frameno2, double inter, int translation, const FTextureID* surfaceskinids)
+void FMD3Model::RenderFrame(FModelRenderer *renderer, FGameTexture * skin, int frameno, int frameno2, double inter, int translation, const FTextureID* surfaceskinids, const TArray<VSMatrix>& boneData, int boneStartPosition)
 {
 	if ((unsigned)frameno >= Frames.Size() || (unsigned)frameno2 >= Frames.Size()) return;
 
@@ -373,7 +374,7 @@ void FMD3Model::RenderFrame(FModelRenderer *renderer, FGameTexture * skin, int f
 		}
 
 		renderer->SetMaterial(surfaceSkin, false, translation);
-		renderer->SetupFrame(this, surf->vindex + frameno * surf->numVertices, surf->vindex + frameno2 * surf->numVertices, surf->numVertices);
+		renderer->SetupFrame(this, surf->vindex + frameno * surf->numVertices, surf->vindex + frameno2 * surf->numVertices, surf->numVertices, {}, -1);
 		renderer->DrawElements(surf->numTriangles * 3, surf->iindex * sizeof(unsigned int));
 	}
 	renderer->SetInterpolation(0.f);

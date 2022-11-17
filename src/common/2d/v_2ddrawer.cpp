@@ -138,7 +138,7 @@ IMPLEMENT_CLASS(DShape2D, false, false)
 
 static void Shape2D_SetTransform(DShape2D* self, DShape2DTransform *transform)
 {
-	self->transform = transform->transform;
+	self->transform = PARAM_NULLCHECK(transform, transform)->transform;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DShape2D, SetTransform, Shape2D_SetTransform)
@@ -739,7 +739,7 @@ void F2DDrawer::AddPoly(FGameTexture *texture, FVector2 *points, int npoints,
 	poly.mColor1.g = uint8_t(colormap.FadeColor.g * fadelevel);
 	poly.mColor1.b = uint8_t(colormap.FadeColor.b * fadelevel);
 
-	bool dorotate = rotation != 0;
+	bool dorotate = rotation != nullAngle;
 
 	float cosrot = (float)cos(rotation.Radians());
 	float sinrot = (float)sin(rotation.Radians());
@@ -1040,7 +1040,7 @@ void F2DDrawer::ClearScreen(PalEntry color)
 //
 //==========================================================================
 
-void F2DDrawer::AddLine(double x1, double y1, double x2, double y2, const IntRect* clip, uint32_t color, uint8_t alpha)
+void F2DDrawer::AddLine(const DVector2& v1, const DVector2& v2, const IntRect* clip, uint32_t color, uint8_t alpha)
 {
 	PalEntry p = (PalEntry)color;
 	p.a = alpha;
@@ -1064,8 +1064,8 @@ void F2DDrawer::AddLine(double x1, double y1, double x2, double y2, const IntRec
 	dg.transform = this->transform;
 	dg.transform.Cells[0][2] += offset.X;
 	dg.transform.Cells[1][2] += offset.Y;
-	mVertices[dg.mVertIndex].Set(x1, y1, 0, 0, 0, p);
-	mVertices[dg.mVertIndex+1].Set(x2, y2, 0, 0, 0, p);
+	mVertices[dg.mVertIndex].Set(v1.X, v1.Y, 0, 0, 0, p);
+	mVertices[dg.mVertIndex+1].Set(v2.X, v2.Y, 0, 0, 0, p);
 	AddCommand(&dg);
 }
 
@@ -1075,23 +1075,20 @@ void F2DDrawer::AddLine(double x1, double y1, double x2, double y2, const IntRec
 //
 //==========================================================================
 
-void F2DDrawer::AddThickLine(int x1, int y1, int x2, int y2, double thickness, uint32_t color, uint8_t alpha)
+void F2DDrawer::AddThickLine(const DVector2& v1, const DVector2& v2, double thickness, uint32_t color, uint8_t alpha)
 {
 	PalEntry p = (PalEntry)color;
 	p.a = alpha;
 
-	DVector2 point0(x1, y1);
-	DVector2 point1(x2, y2);
-
-	DVector2 delta = point1 - point0;
-	DVector2 perp(-delta.Y, delta.X);
+	DVector2 delta = v2 - v1;
+	DVector2 perp = delta.Rotated90CCW();
 	perp.MakeUnit();
 	perp *= thickness / 2;
 
-	DVector2 corner0 = point0 + perp;
-	DVector2 corner1 = point0 - perp;
-	DVector2 corner2 = point1 + perp;
-	DVector2 corner3 = point1 - perp;
+	DVector2 corner0 = v1 + perp;
+	DVector2 corner1 = v1 - perp;
+	DVector2 corner2 = v2 + perp;
+	DVector2 corner3 = v2 - perp;
 
 	RenderCommand dg;
 

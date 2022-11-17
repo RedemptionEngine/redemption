@@ -6,7 +6,7 @@
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 2 of the License, or
 // (at your option) any later version.
 //
 // This program is distributed in the hope that it will be useful,
@@ -222,6 +222,8 @@ bool FOBJModel::Load(const char* fn, int lumpnum, const char* buffer, int length
 	curSurface->faceStart = aggSurfFaceCount;
 	surfaces.Push(*curSurface);
 	delete curSurface;
+	hasSurfaces = surfaces.Size() > 1;
+
 
 	if (uvs.Size() == 0)
 	{ // Needed so that OBJs without UVs can work
@@ -615,7 +617,7 @@ FVector3 FOBJModel::CalculateNormalSmooth(unsigned int vidx, unsigned int smooth
  */
 int FOBJModel::FindFrame(const char* name, bool nodefault)
 {
-	return nodefault? FErr_Singleframe : 0; // OBJs are not animated.
+	return nodefault ? FErr_Singleframe : 0; // OBJs are not animated.
 }
 
 /**
@@ -628,7 +630,7 @@ int FOBJModel::FindFrame(const char* name, bool nodefault)
  * @param inter The amount to interpolate the two frames.
  * @param translation The translation for the skin
  */
-void FOBJModel::RenderFrame(FModelRenderer *renderer, FGameTexture * skin, int frameno, int frameno2, double inter, int translation, const FTextureID* surfaceskinids)
+void FOBJModel::RenderFrame(FModelRenderer *renderer, FGameTexture * skin, int frameno, int frameno2, double inter, int translation, const FTextureID* surfaceskinids, const TArray<VSMatrix>& boneData, int boneStartPosition)
 {
 	// Prevent the model from rendering if the frame number is < 0
 	if (frameno < 0 || frameno2 < 0) return;
@@ -657,7 +659,7 @@ void FOBJModel::RenderFrame(FModelRenderer *renderer, FGameTexture * skin, int f
 		}
 
 		renderer->SetMaterial(userSkin, false, translation);
-		renderer->SetupFrame(this, surf->vbStart, surf->vbStart, surf->numTris * 3);
+		renderer->SetupFrame(this, surf->vbStart, surf->vbStart, surf->numTris * 3, {}, -1);
 		renderer->DrawArrays(0, surf->numTris * 3);
 	}
 }

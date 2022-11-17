@@ -159,7 +159,7 @@ public:
 	template<class T>
 	FSerializer &Array(const char *key, T *obj, T *def, int count, bool fullcompare = false)
 	{
-		if (!save_full && fullcompare && isWriting() && def != nullptr && !memcmp(obj, def, count * sizeof(T)))
+		if (!save_full && fullcompare && isWriting() && key != nullptr && def != nullptr && !memcmp(obj, def, count * sizeof(T)))
 		{
 			return *this;
 		}
@@ -326,6 +326,11 @@ inline FSerializer &Serialize(FSerializer &arc, const char *key, DVector2 &p, DV
 	return arc.Array<double>(key, &p[0], def? &(*def)[0] : nullptr, 2, true);
 }
 
+inline FSerializer& Serialize(FSerializer& arc, const char* key, FVector4& p, FVector4* def)
+{
+	return arc.Array<float>(key, &p[0], def ? &(*def)[0] : nullptr, 4, true);
+}
+
 inline FSerializer& Serialize(FSerializer& arc, const char* key, FVector3& p, FVector3* def)
 {
 	return arc.Array<float>(key, &p[0], def ? &(*def)[0] : nullptr, 3, true);
@@ -339,7 +344,7 @@ inline FSerializer& Serialize(FSerializer& arc, const char* key, FVector2& p, FV
 template<class T>
 inline FSerializer &Serialize(FSerializer &arc, const char *key, TAngle<T> &p, TAngle<T> *def)
 {
-	return Serialize(arc, key, p.Degrees, def? &def->Degrees : nullptr);
+	return Serialize(arc, key, p.Degrees__(), def ? &def->Degrees__() : nullptr);
 }
 
 inline FSerializer &Serialize(FSerializer &arc, const char *key, PalEntry &pe, PalEntry *def)

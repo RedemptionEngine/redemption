@@ -99,8 +99,8 @@ CUSTOM_CVAR(Float, snd_mastervolume, 1.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVA
 		self = 1.f;
 
 	ChangeMusicSetting(zmusic_snd_mastervolume, nullptr, self);
-	snd_sfxvolume.Callback();
-	snd_musicvolume.Callback();
+	snd_sfxvolume->Callback();
+	snd_musicvolume->Callback();
 }
 
 //==========================================================================
@@ -283,7 +283,7 @@ void I_InitSound ()
 		GSnd = new NullSoundRenderer;
 		Printf (TEXTCOLOR_RED"Sound init failed. Using nosound.\n");
 	}
-	snd_sfxvolume.Callback ();
+	snd_sfxvolume->Callback ();
 }
 
 
@@ -302,6 +302,7 @@ const char *GetSampleTypeName(SampleType type)
     {
         case SampleType_UInt8: return "Unsigned 8-bit";
         case SampleType_Int16: return "Signed 16-bit";
+		default: break;
     }
     return "(invalid sample type)";
 }

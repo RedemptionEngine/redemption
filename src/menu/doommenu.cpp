@@ -67,6 +67,7 @@
 #include "i_time.h"
 #include "shiftstate.h"
 #include "g_levellocals.h"
+#include "s_music.h"
 #include "hwrenderer/scene/hw_drawinfo.h"
 
 EXTERN_CVAR(Int, cl_gfxlocalization)
@@ -240,7 +241,7 @@ bool M_SetSpecialMenu(FName& menu, int param)
 //
 //=============================================================================
 
-void M_StartControlPanel(bool makeSound, bool scaleoverride)
+void OnMenuOpen(bool makeSound)
 {
 	if (hud_toggled)
 		D_ToggleHud();
@@ -255,7 +256,6 @@ void M_StartControlPanel(bool makeSound, bool scaleoverride)
 	{
 		S_Sound(CHAN_VOICE, CHANF_UI, "menu/activate", snd_menuvolume, ATTN_NONE);
 	}
-	M_DoStartControlPanel(scaleoverride);
 }
 
 
@@ -301,6 +301,14 @@ void System_M_Dim()
 }
 
 
+static void M_Quit()
+{
+	S_StopAllChannels();
+	S_StopMusic(true);
+	CleanSWDrawer();
+	ST_Endoom();
+}
+
 //=============================================================================
 //
 //
@@ -311,8 +319,7 @@ CCMD (menu_quit)
 {	// F10
 	if (m_quickexit)
 	{
-		CleanSWDrawer();
-		ST_Endoom();
+		M_Quit();
 	}
 
 	M_StartControlPanel (true);
@@ -343,8 +350,7 @@ CCMD (menu_quit)
 				I_WaitVBL(105);
 			}
 		}
-		CleanSWDrawer();
-		ST_Endoom();
+		M_Quit();
 	});
 
 
@@ -1471,32 +1477,4 @@ CCMD (menu_video)
 {
 	M_StartControlPanel (true);
 	M_SetMenu(NAME_VideoModeMenu, -1);
-}
-
-
-#ifdef _WIN32
-EXTERN_CVAR(Bool, vr_enable_quadbuffered)
-#endif
-
-void UpdateVRModes(bool considerQuadBuffered)
-{
-	FOptionValues** pVRModes = OptionValues.CheckKey("VRMode");
-	if (pVRModes == nullptr) return;
-
-	TArray<FOptionValues::Pair>& vals = (*pVRModes)->mValues;
-	TArray<FOptionValues::Pair> filteredValues;
-	int cnt = vals.Size();
-	for (int i = 0; i < cnt; ++i) {
-		auto const& mode = vals[i];
-		if (mode.Value == 7) {  // Quad-buffered stereo
-#ifdef _WIN32
-			if (!vr_enable_quadbuffered) continue;
-#else
-			continue;  // Remove quad-buffered option on Mac and Linux
-#endif
-			if (!considerQuadBuffered) continue;  // Probably no compatible screen mode was found
-		}
-		filteredValues.Push(mode);
-	}
-	vals = filteredValues;
 }

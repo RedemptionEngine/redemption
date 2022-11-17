@@ -451,6 +451,7 @@ enum EBlockFlags
 	BLOCKF_SIGHT = 256,
 	BLOCKF_HITSCAN = 512,
 	BLOCKF_SOUND = 1024,
+	BLOCKF_LANDMONSTERS = 2048,
 };
 
 // Pointer constants, bitfield-enabled
@@ -642,6 +643,9 @@ enum EQuakeFlags
 	QF_FULLINTENSITY =	1 << 4,
 	QF_WAVE =			1 << 5,
 	QF_3D =				1 << 6,
+	QF_GROUNDONLY =		1 << 7,
+	QF_AFFECTACTORS =	1 << 8,
+	QF_SHAKEONLY =		1 << 9,
 };
 
 // A_CheckProximity flags
@@ -685,6 +689,8 @@ enum EParticleFlags
 	SPF_RELACCEL =		1 << 3,
 	SPF_RELANG =		1 << 4,
 	SPF_NOTIMEFREEZE =	1 << 5,
+	SPF_ROLL =			1 << 6,
+	SPF_REPLACE =		1 << 7,
 
 	SPF_RELATIVE =	SPF_RELPOS|SPF_RELVEL|SPF_RELACCEL|SPF_RELANG
 };
