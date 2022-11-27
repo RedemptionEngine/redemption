@@ -59,7 +59,7 @@
 DVector2 AM_GetPosition();
 int Net_GetLatency(int *ld, int *ad);
 void PrintPickupMessage(bool localview, const FString &str);
-bool P_CheckForResurrection(AActor* self, bool usevilestates, FState* state = nullptr, FSoundID sound = 0);
+bool P_CheckForResurrection(AActor* self, bool usevilestates, FState* state = nullptr, FSoundID sound = NO_SOUND);
 
 // FCheckPosition requires explicit construction and destruction when used in the VM
 
@@ -173,7 +173,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_SoundVolume, S_ChangeActorSoundVolume)
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_PlaySound, A_PlaySound)
 {
 	PARAM_SELF_PROLOGUE(AActor);
-	PARAM_SOUND(soundid);
+	PARAM_INT(soundid);
 	PARAM_INT(channel);
 	PARAM_FLOAT(volume);
 	PARAM_BOOL(looping);
@@ -187,7 +187,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_PlaySound, A_PlaySound)
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSound, A_StartSound)
 {
 	PARAM_SELF_PROLOGUE(AActor);
-	PARAM_SOUND(soundid);
+	PARAM_INT(soundid);
 	PARAM_INT(channel);
 	PARAM_INT(flags);
 	PARAM_FLOAT(volume);
@@ -201,15 +201,15 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSound, A_StartSound)
 
 void A_StartSoundIfNotSame(AActor *self, int soundid, int checksoundid, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
 {
-	if (!S_AreSoundsEquivalent (self, soundid, checksoundid))
+	if (!S_AreSoundsEquivalent (self, FSoundID::fromInt(soundid), FSoundID::fromInt(checksoundid)))
 		A_StartSound(self, soundid, channel, flags, volume, attenuation, pitch, startTime);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSoundIfNotSame, A_StartSoundIfNotSame)
 {
 	PARAM_SELF_PROLOGUE(AActor);
-	PARAM_SOUND(soundid);
-	PARAM_SOUND(checksoundid);
+	PARAM_INT(soundid);
+	PARAM_INT(checksoundid);
 	PARAM_INT(channel);
 	PARAM_INT(flags);
 	PARAM_FLOAT(volume);
@@ -220,7 +220,13 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSoundIfNotSame, A_StartSoundIfNotSa
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION_NATIVE(AActor, IsActorPlayingSound, S_IsActorPlayingSomething)
+// direct native scripting export.
+static int S_IsActorPlayingSomethingID(AActor* actor, int channel, int sound_id)
+{
+	return S_IsActorPlayingSomething(actor, channel, FSoundID::fromInt(sound_id));
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, IsActorPlayingSound, S_IsActorPlayingSomethingID)
 {
 	PARAM_SELF_PROLOGUE(AActor);
 	PARAM_INT(channel);
@@ -1615,7 +1621,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_ExtChase, A_ExtChase)
 
 int CheckForResurrection(AActor *self, FState* state, int sound)
 {
-	return P_CheckForResurrection(self, false, state, sound);
+	return P_CheckForResurrection(self, false, state, FSoundID::fromInt(sound));
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_CheckForResurrection, CheckForResurrection)
@@ -1623,7 +1629,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_CheckForResurrection, CheckForResurrecti
 	PARAM_SELF_PROLOGUE(AActor);
 	PARAM_STATE(state);
 	PARAM_INT(sound);
-	ACTION_RETURN_BOOL(P_CheckForResurrection(self, false, state, sound));
+	ACTION_RETURN_BOOL(CheckForResurrection(self, state, sound));
 }
 
 static void ZS_Face(AActor *self, AActor *faceto, double max_turn, double max_pitch, double ang_offset, double pitch_offset, int flags, double z_add)
