@@ -422,7 +422,7 @@ void player_t::SetLogText (const char *text)
 	if (mo && mo->CheckLocalView())
 	{
 		// Print log text to console
-		Printf(PRINT_NONOTIFY, TEXTCOLOR_GOLD "%s\n", LogText[0] == '$' ? GStrings(text + 1) : text);
+		Printf(PRINT_HIGH | PRINT_NONOTIFY, TEXTCOLOR_GOLD "%s\n", LogText[0] == '$' ? GStrings(text + 1) : text);
 	}
 }
 
@@ -794,6 +794,12 @@ DEFINE_ACTION_FUNCTION(_PlayerInfo, GetMoveBob)
 {
 	PARAM_SELF_STRUCT_PROLOGUE(player_t);
 	ACTION_RETURN_FLOAT(self->userinfo.GetMoveBob());
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, GetFViewBob)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	ACTION_RETURN_BOOL(self->userinfo.GetFViewBob());
 }
 
 DEFINE_ACTION_FUNCTION(_PlayerInfo, GetStillBob)
@@ -1258,6 +1264,9 @@ void P_PlayerThink (player_t *player)
 	player->original_cmd = cmd->ucmd;
 	// Don't interpolate the view for more than one tic
 	player->cheats &= ~CF_INTERPVIEW;
+	player->cheats &= ~CF_INTERPVIEWANGLES;
+	player->cheats &= ~CF_SCALEDNOLERP;
+	player->cheats &= ~CF_NOFOVINTERP;
 	player->mo->FloatVar("prevBob") = player->bob;
 
 	IFVIRTUALPTRNAME(player->mo, NAME_PlayerPawn, PlayerThink)

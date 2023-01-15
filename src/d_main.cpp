@@ -605,6 +605,18 @@ CVAR (Flag, sv_alwaysallowsaves,	dmflagsr, DFR_YES_USERSAVE);
 
 //==========================================================================
 //
+// CVAR dmflags3
+//
+//==========================================================================
+
+CUSTOM_CVAR(Int, dmflags3, 0, CVAR_SERVERINFO | CVAR_NOINITCALL)
+{
+}
+
+CVAR(Flag, sv_noplayerclip, dmflags3, DF3_NO_PLAYER_CLIP);
+
+//==========================================================================
+//
 // CVAR compatflags
 //
 //==========================================================================
@@ -935,11 +947,8 @@ void D_Display ()
 		DAngle fov = DAngle::fromDeg(90.);
 		AActor *cam = players[consoleplayer].camera;
 		if (cam)
-		{
-			if (cam->player)
-				fov = DAngle::fromDeg(cam->player->FOV);
-			else fov = DAngle::fromDeg(cam->CameraFOV);
-		}
+			fov = DAngle::fromDeg(cam->GetFOV(I_GetTimeFrac()));
+
 		R_SetFOV(vp, fov);
 	}
 
@@ -1273,7 +1282,7 @@ void D_DoomLoop ()
 		catch (CVMAbortException &error)
 		{
 			error.MaybePrintMessage();
-			Printf(PRINT_NONOTIFY, "%s", error.stacktrace.GetChars());
+			Printf(PRINT_NONOTIFY | PRINT_BOLD, "%s", error.stacktrace.GetChars());
 			D_ErrorCleanup();
 		}
 	}

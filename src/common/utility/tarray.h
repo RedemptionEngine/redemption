@@ -213,7 +213,7 @@ public:
 	{
 	}
 	////////
-	TArray ()
+	constexpr TArray ()
 	{
 		Most = 0;
 		Count = 0;
@@ -915,6 +915,9 @@ public:
 	typedef class TMapConstIterator<KT, VT, MyType> ConstIterator;
 	typedef struct { const KT Key; VT Value; } Pair;
 	typedef const Pair ConstPair;
+
+	typedef KT KeyType;
+	typedef VT ValueType;
 
 	TMap() { NumUsed = 0; SetNodeVector(1); }
 	TMap(hash_t size) { NumUsed = 0; SetNodeVector(size); }

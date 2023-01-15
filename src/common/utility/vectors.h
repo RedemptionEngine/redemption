@@ -1428,11 +1428,6 @@ public:
 		return int(Degrees_ * (512 / 90.0));
 	}
 
-	constexpr double Buildfang() const
-	{
-		return Degrees_ * (512 / 90.0);
-	}
-
 	constexpr int Q16() const
 	{
 		return int(Degrees_ * (16384 / 90.0));
@@ -1455,7 +1450,8 @@ public:
 
 	double Tan() const
 	{
-		return vec_t(g_tan(Radians()));
+		auto bam = BAMs();
+		return g_sinbam(bam) / g_cosbam(bam);
 	}
 
 	// This is for calculating vertical velocity. For high pitches the tangent will become too large to be useful.
@@ -1545,6 +1541,16 @@ template<class T>
 inline TAngle<T> interpolatedvalue(const TAngle<T> &oang, const TAngle<T> &ang, const double interpfrac)
 {
 	return oang + (deltaangle(oang, ang) * interpfrac);
+}
+
+template<class T>
+inline TRotator<T> interpolatedvalue(const TRotator<T> &oang, const TRotator<T> &ang, const double interpfrac)
+{
+	return TRotator<T>(
+		interpolatedvalue(oang.Pitch, ang.Pitch, interpfrac),
+		interpolatedvalue(oang.Yaw, ang.Yaw, interpfrac),
+		interpolatedvalue(oang.Roll, ang.Roll, interpfrac)
+	);
 }
 
 template <class T>

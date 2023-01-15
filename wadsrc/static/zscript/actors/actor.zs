@@ -669,6 +669,7 @@ class Actor : Thinker native
 	native bool UpdateWaterLevel (bool splash = true);
 	native bool IsZeroDamage();
 	native void ClearInterpolation();
+	native void ClearFOVInterpolation();
 	native clearscope Vector3 PosRelative(sector sec) const;
 	native void RailAttack(FRailParams p);
 		
@@ -809,6 +810,10 @@ class Actor : Thinker native
 	native clearscope double GetGravity() const;
 	native void DoMissileDamage(Actor target);
 	native void PlayPushSound();
+	native bool BounceActor(Actor blocking, bool onTop);
+	native bool BounceWall(Line l = null);
+	native bool BouncePlane(SecPlane plane);
+	native void PlayBounceSound(bool onFloor);
 
 	clearscope double PitchTo(Actor target, double zOfs = 0, double targZOfs = 0, bool absolute = false) const
 	{
@@ -1129,7 +1134,7 @@ class Actor : Thinker native
 	native void A_StopSounds(int chanmin, int chanmax);
 	deprecated("2.3", "Use A_StartSound() instead") native void A_PlaySoundEx(sound whattoplay, name slot, bool looping = false, int attenuation = 0);
 	deprecated("2.3", "Use A_StopSound() instead") native void A_StopSoundEx(name slot);
-	native clearscope bool IsActorPlayingSound(int channel, Sound snd = 0);
+	native clearscope bool IsActorPlayingSound(int channel, Sound snd = -1);
 	native void A_SeekerMissile(int threshold, int turnmax, int flags = 0, int chance = 50, int distance = 10);
 	native action state A_Jump(int chance, statelabel label, ...);
 	native Actor A_SpawnProjectile(class<Actor> missiletype, double spawnheight = 32, double spawnofs_xy = 0, double angle = 0, int flags = 0, double pitch = 0, int ptr = AAPTR_TARGET);
@@ -1203,8 +1208,8 @@ class Actor : Thinker native
 	deprecated("2.3", "User variables are deprecated in ZScript. Actor variables are directly accessible") native void A_SetUserArray(name varname, int index, int value);
 	deprecated("2.3", "User variables are deprecated in ZScript. Actor variables are directly accessible") native void A_SetUserVarFloat(name varname, double value);
 	deprecated("2.3", "User variables are deprecated in ZScript. Actor variables are directly accessible") native void A_SetUserArrayFloat(name varname, int index, double value);
-	native void A_Quake(int intensity, int duration, int damrad, int tremrad, sound sfx = "world/quake");
-	native void A_QuakeEx(int intensityX, int intensityY, int intensityZ, int duration, int damrad, int tremrad, sound sfx = "world/quake", int flags = 0, double mulWaveX = 1, double mulWaveY = 1, double mulWaveZ = 1, int falloff = 0, int highpoint = 0, double rollIntensity = 0, double rollWave = 0);
+	native void A_Quake(double intensity, int duration, int damrad, int tremrad, sound sfx = "world/quake");
+	native void A_QuakeEx(double intensityX, double intensityY, double intensityZ, int duration, int damrad, int tremrad, sound sfx = "world/quake", int flags = 0, double mulWaveX = 1, double mulWaveY = 1, double mulWaveZ = 1, int falloff = 0, int highpoint = 0, double rollIntensity = 0, double rollWave = 0);
 	action native void A_SetTics(int tics);
 	native void A_DamageSelf(int amount, name damagetype = "none", int flags = 0, class<Actor> filter = null, name species = "None", int src = AAPTR_DEFAULT, int inflict = AAPTR_DEFAULT);
 	native void A_DamageTarget(int amount, name damagetype = "none", int flags = 0, class<Actor> filter = null, name species = "None", int src = AAPTR_DEFAULT, int inflict = AAPTR_DEFAULT);

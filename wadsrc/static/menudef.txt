@@ -1221,6 +1221,7 @@ OptionMenu "MiscOptions" protected
 	}
 	Option "$MISCMNU_QUERYIWAD",				"queryiwad", "OnOff"
 	StaticText " "
+	Option "$MISCMNU_FVIEWBOB",            "fviewbob", "OnOff"
 	Option "$MISCMNU_NOCHEATS",					"nocheats", "OnOff"
 	Option "$MISCMNU_ALLCHEATS",				"allcheats", "OnOff"
 	Option "$MISCMNU_ENABLEAUTOSAVES",			"disableautosave", "Autosave"
@@ -1709,6 +1710,7 @@ OptionMenu CoopOptions protected
 	Option "$GMPLYMNU_KEEPAMMO",				"sv_cooploseammo", "NoYes"
 	Option "$GMPLYMNU_LOSEHALFAMMO",			"sv_coophalveammo", "YesNo"
 	Option "$GMPLYMNU_SPAWNWHEREDIED",			"sv_samespawnspot", "YesNo"
+	Option "$GMPLYMNU_NOPLAYERCLIP",			"sv_noplayerclip", "YesNo"
 	Class "GameplayMenu"
 }
 

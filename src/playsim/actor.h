@@ -923,9 +923,13 @@ public:
 	void SetPitch(DAngle p, int fflags);
 	void SetAngle(DAngle ang, int fflags);
 	void SetRoll(DAngle roll, int fflags);
+
+	// These also set CF_INTERPVIEWANGLES for players.
 	void SetViewPitch(DAngle p, int fflags);
 	void SetViewAngle(DAngle ang, int fflags);
 	void SetViewRoll(DAngle roll, int fflags);
+
+	double GetFOV(double ticFrac);
 
 	PClassActor *GetBloodType(int type = 0) const;
 
@@ -996,6 +1000,7 @@ public:
 	DVector3 Vec3Angle(double length, DAngle angle, double dz, bool absolute = false);
 
 	void ClearInterpolation();
+	void ClearFOVInterpolation();
 
 	void Move(const DVector3 &vel)
 	{
@@ -1276,6 +1281,7 @@ public:
 	// [RH] Used to interpolate the view to get >35 FPS
 	DVector3 Prev;
 	DRotator PrevAngles;
+	DAngle   PrevFOV;
 	int PrevPortalGroup;
 	TArray<FDynamicLight *> AttachedLights;
 	TDeletingArray<FLightDefaults *> UserLights;

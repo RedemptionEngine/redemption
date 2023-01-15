@@ -716,6 +716,13 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, ClearInterpolation, ClearInterpolation)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(AActor, ClearFOVInterpolation)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	self->ClearFOVInterpolation();
+	return 0;
+}
+
 static int ApplyDamageFactors(PClassActor *itemcls, int damagetype, int damage, int defdamage)
 {
 	DmgFactors &df = itemcls->ActorInfo()->DamageFactors;
@@ -1742,6 +1749,27 @@ DEFINE_ACTION_FUNCTION_NATIVE(AInventory, PrintPickupMessage, PrintPickupMessage
 //
 //=====================================================================================
 
+DEFINE_ACTION_FUNCTION_NATIVE(AKey, IsLockDefined, P_IsLockDefined)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(locknum);
+	ACTION_RETURN_BOOL(P_IsLockDefined(locknum));
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AKey, GetMapColorForLock, P_GetMapColorForLock)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(locknum);
+	ACTION_RETURN_INT(P_GetMapColorForLock(locknum));
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AKey, GetMapColorForKey, P_GetMapColorForKey)
+{
+	PARAM_PROLOGUE;
+	PARAM_OBJECT(key, AActor);
+	ACTION_RETURN_INT(P_GetMapColorForKey(key));
+}
+
 DEFINE_ACTION_FUNCTION_NATIVE(AKey, GetKeyTypeCount, P_GetKeyTypeCount)
 {
 	PARAM_PROLOGUE;
@@ -1786,6 +1814,51 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, CheckFor3DCeilingHit, CheckFor3DCeilingHit
 	ACTION_RETURN_BOOL(P_CheckFor3DCeilingHit(self, z, trigger));
 }
 
+//=====================================================================================
+//
+// Bounce exports
+//
+//=====================================================================================
+DEFINE_ACTION_FUNCTION(AActor, BounceActor)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_OBJECT(blocking, AActor);
+	PARAM_BOOL(onTop);
+
+	ACTION_RETURN_BOOL(P_BounceActor(self, blocking, onTop));
+}
+
+DEFINE_ACTION_FUNCTION(AActor, BounceWall)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_POINTER(l, line_t);
+
+	auto cur = self->BlockingLine;
+	if (l)
+		self->BlockingLine = l;
+
+	bool res = P_BounceWall(self);
+	self->BlockingLine = cur;
+
+	ACTION_RETURN_BOOL(res);
+}
+
+DEFINE_ACTION_FUNCTION(AActor, BouncePlane)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_POINTER(plane, secplane_t);
+
+	ACTION_RETURN_BOOL(self->FloorBounceMissile(*plane));
+}
+
+DEFINE_ACTION_FUNCTION(AActor, PlayBounceSound)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_BOOL(onFloor);
+
+	self->PlayBounceSound(onFloor);
+	return 0;
+}
 
 
 static int isFrozen(AActor *self)
@@ -2090,3 +2163,36 @@ DEFINE_FIELD_X(FLineTraceData, FLineTraceData, LineSide);
 DEFINE_FIELD_X(FLineTraceData, FLineTraceData, LinePart);
 DEFINE_FIELD_X(FLineTraceData, FLineTraceData, SectorPlane);
 DEFINE_FIELD_X(FLineTraceData, FLineTraceData, HitType);
+
+DEFINE_FIELD_NAMED_X(FSpawnParticleParams, FSpawnParticleParams, color, color1);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, texture);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, style);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, flags);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, lifetime);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, size);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, sizestep);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, pos);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, vel);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, accel);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, startalpha);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, fadestep);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, startroll);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, rollvel);
+DEFINE_FIELD_X(FSpawnParticleParams, FSpawnParticleParams, rollacc);
+
+static void SpawnParticle(FLevelLocals *Level, FSpawnParticleParams *params)
+{
+	P_SpawnParticle(Level,	params->pos, params->vel, params->accel,
+		params->color, params->startalpha, params->lifetime,
+		params->size, params->fadestep, params->sizestep,
+		params->flags, params->texture, ERenderStyle(params->style),
+		params->startroll, params->rollvel, params->rollacc);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, SpawnParticle, SpawnParticle)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
+	PARAM_POINTER(p, FSpawnParticleParams);
+	SpawnParticle(self, p);
+	return 0;
+}

@@ -22,13 +22,12 @@
 
 #include "vk_shader.h"
 #include "vk_ppshader.h"
-#include "vulkan/system/vk_builders.h"
-#include "vulkan/system/vk_framebuffer.h"
+#include "zvulkan/vulkanbuilders.h"
+#include "vulkan/system/vk_renderdevice.h"
 #include "hw_shaderpatcher.h"
 #include "filesystem.h"
 #include "engineerrors.h"
 #include "version.h"
-#include <ShaderLang.h>
 
 bool VkShaderManager::CompileNextShader()
 {
@@ -113,15 +112,13 @@ bool VkShaderManager::CompileNextShader()
 	return false;
 }
 
-VkShaderManager::VkShaderManager(VulkanFrameBuffer* fb) : fb(fb)
+VkShaderManager::VkShaderManager(VulkanRenderDevice* fb) : fb(fb)
 {
-	ShInitialize();
 	CompileNextShader();
 }
 
 VkShaderManager::~VkShaderManager()
 {
-	ShFinalize();
 }
 
 void VkShaderManager::Deinit()
@@ -178,6 +175,8 @@ static const char *shaderBindings = R"(
 		float uClipHeight;
 		float uClipHeightDirection;
 		int uShadowmapFilter;
+		
+		int uLightBlendMode;
 	};
 
 	layout(set = 1, binding = 1, std140) uniform MatricesUBO {
@@ -247,6 +246,7 @@ static const char *shaderBindings = R"(
 	layout(set = 2, binding = 8) uniform sampler2D texture9;
 	layout(set = 2, binding = 9) uniform sampler2D texture10;
 	layout(set = 2, binding = 10) uniform sampler2D texture11;
+	layout(set = 2, binding = 11) uniform sampler2D texture12;
 
 	// This must match the PushConstants struct
 	layout(push_constant) uniform PushConstants
@@ -346,14 +346,14 @@ std::unique_ptr<VulkanShader> VkShaderManager::LoadVertShader(FString shadername
 	code << "#define NPOT_EMULATION\n";
 #endif
 	code << shaderBindings;
-	if (!fb->device->UsedDeviceFeatures.shaderClipDistance) code << "#define NO_CLIPDISTANCE_SUPPORT\n";
+	if (!fb->device->EnabledFeatures.Features.shaderClipDistance) code << "#define NO_CLIPDISTANCE_SUPPORT\n";
 	code << "#line 1\n";
 	code << LoadPrivateShaderLump(vert_lump).GetChars() << "\n";
 
 	return ShaderBuilder()
-		.VertexShader(code)
+		.VertexShader(code.GetChars())
 		.DebugName(shadername.GetChars())
-		.Create(shadername.GetChars(), fb->device);
+		.Create(shadername.GetChars(), fb->device.get());
 }
 
 std::unique_ptr<VulkanShader> VkShaderManager::LoadFragShader(FString shadername, const char *frag_lump, const char *material_lump, const char *light_lump, const char *defines, bool alphatest, bool gbufferpass)
@@ -370,7 +370,7 @@ std::unique_ptr<VulkanShader> VkShaderManager::LoadFragShader(FString shadername
 	code << shaderBindings;
 	FString placeholder = "\n";
 
-	if (!fb->device->UsedDeviceFeatures.shaderClipDistance) code << "#define NO_CLIPDISTANCE_SUPPORT\n";
+	if (!fb->device->EnabledFeatures.Features.shaderClipDistance) code << "#define NO_CLIPDISTANCE_SUPPORT\n";
 	if (!alphatest) code << "#define NO_ALPHATEST\n";
 	if (gbufferpass) code << "#define GBUFFER_PASS\n";
 
@@ -443,14 +443,14 @@ std::unique_ptr<VulkanShader> VkShaderManager::LoadFragShader(FString shadername
 	}
 
 	return ShaderBuilder()
-		.FragmentShader(code)
+		.FragmentShader(code.GetChars())
 		.DebugName(shadername.GetChars())
-		.Create(shadername.GetChars(), fb->device);
+		.Create(shadername.GetChars(), fb->device.get());
 }
 
 FString VkShaderManager::GetTargetGlslVersion()
 {
-	if (fb->device->ApiVersion == VK_API_VERSION_1_2)
+	if (fb->device->Instance->ApiVersion == VK_API_VERSION_1_2)
 	{
 		return "#version 460\n#extension GL_EXT_ray_query : enable\n";
 	}

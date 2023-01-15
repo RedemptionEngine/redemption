@@ -407,6 +407,7 @@ void AActor::PostSerialize()
 		}
 	}
 	ClearInterpolation();
+	ClearFOVInterpolation();
 	UpdateWaterLevel(false);
 }
 
@@ -1996,7 +1997,9 @@ static double P_XYMovement (AActor *mo, DVector2 scroll)
 						(mo->player->cmd.ucmd.forwardmove | mo->player->cmd.ucmd.sidemove) &&
 						mo->BlockingLine->sidedef[1] != NULL)
 					{
-						mo->Vel.Z = WATER_JUMP_SPEED;
+						double spd = mo->FloatVar(NAME_WaterClimbSpeed);
+						if (fabs(spd) >= EQUAL_EPSILON)
+							mo->Vel.Z = spd;
 					}
 					// If the blocked move executed any push specials that changed the
 					// actor's velocity, do not attempt to slide.
@@ -2410,9 +2413,12 @@ static void P_ZMovement (AActor *mo, double oldfloorz)
 	}
 	if (mo->player && (mo->flags & MF_NOGRAVITY) && (mo->Z() > mo->floorz))
 	{
-		if (!mo->IsNoClip2())
+		FBaseCVar* const fViewBobCvar = G_GetUserCVar(int(mo->player - players),"FViewBob");
+		bool const fViewBob = fViewBobCvar->GetGenericRep(fViewBobCvar->GetRealType()).Bool;
+
+		if (!mo->IsNoClip2() && fViewBob)
 		{
-			mo->AddZ(DAngle::fromDeg(360 / 80.f * mo->Level->maptime).Sin() / 8);
+			mo->AddZ(DAngle::fromDeg(360 / 80.f * mo->Level->maptime).Sin() / 8 * mo->FloatVar(NAME_FlyBob));
 		}
 
 		if (!(mo->flags8 & MF8_NOFRICTION))
@@ -3427,10 +3433,29 @@ void AActor::SetPitch(DAngle p, int fflags)
 
 	if (p != Angles.Pitch)
 	{
-		Angles.Pitch = p;
-		if (player != nullptr && (fflags & SPF_INTERPOLATE))
+		if (player != nullptr)
 		{
-			player->cheats |= CF_INTERPVIEW;
+			const bool mustLerp = !P_NoInterpolation(player, this);
+
+			if ((fflags & SPF_INTERPOLATE) || ((fflags & SPF_SCALEDNOLERP) && mustLerp))
+			{
+				Angles.Pitch = p;
+				player->cheats |= CF_INTERPVIEW;
+			}
+			else if ((fflags & SPF_SCALEDNOLERP) && !mustLerp)
+			{
+				player->angleTargets.Pitch = deltaangle(Angles.Pitch, p);
+				player->angleAppliedAmounts.Pitch = nullAngle;
+				player->cheats |= CF_SCALEDNOLERP;
+			}
+			else
+			{
+				Angles.Pitch = p;
+			}
+		}
+		else
+		{
+			Angles.Pitch = p;
 		}
 	}
 	
@@ -3440,10 +3465,29 @@ void AActor::SetAngle(DAngle ang, int fflags)
 {
 	if (ang != Angles.Yaw)
 	{
-		Angles.Yaw = ang;
-		if (player != nullptr && (fflags & SPF_INTERPOLATE))
+		if (player != nullptr)
 		{
-			player->cheats |= CF_INTERPVIEW;
+			const bool mustLerp = !P_NoInterpolation(player, this);
+
+			if ((fflags & SPF_INTERPOLATE) || ((fflags & SPF_SCALEDNOLERP) && mustLerp))
+			{
+				Angles.Yaw = ang;
+				player->cheats |= CF_INTERPVIEW;
+			}
+			else if ((fflags & SPF_SCALEDNOLERP) && !mustLerp)
+			{
+				player->angleTargets.Yaw = deltaangle(Angles.Yaw, ang);
+				player->angleAppliedAmounts.Yaw = nullAngle;
+				player->cheats |= CF_SCALEDNOLERP;
+			}
+			else
+			{
+				Angles.Yaw = ang;
+			}
+		}
+		else
+		{
+			Angles.Yaw = ang;
 		}
 	}
 	
@@ -3453,10 +3497,29 @@ void AActor::SetRoll(DAngle r, int fflags)
 {
 	if (r != Angles.Roll)
 	{
-		Angles.Roll = r;
-		if (player != nullptr && (fflags & SPF_INTERPOLATE))
+		if (player != nullptr)
 		{
-			player->cheats |= CF_INTERPVIEW;
+			const bool mustLerp = !P_NoInterpolation(player, this);
+
+			if ((fflags & SPF_INTERPOLATE) || ((fflags & SPF_SCALEDNOLERP) && mustLerp))
+			{
+				Angles.Roll = r;
+				player->cheats |= CF_INTERPVIEW;
+			}
+			else if ((fflags & SPF_SCALEDNOLERP) && !mustLerp)
+			{
+				player->angleTargets.Roll = deltaangle(Angles.Roll, r);
+				player->angleAppliedAmounts.Roll = nullAngle;
+				player->cheats |= CF_SCALEDNOLERP;
+			}
+			else
+			{
+				Angles.Roll = r;
+			}
+		}
+		else
+		{
+			Angles.Roll = r;
 		}
 	}
 }
@@ -3473,7 +3536,7 @@ void AActor::SetViewPitch(DAngle p, int fflags)
 		ViewAngles.Pitch = p;
 		if (player != nullptr && (fflags & SPF_INTERPOLATE))
 		{
-			player->cheats |= CF_INTERPVIEW;
+			player->cheats |= CF_INTERPVIEWANGLES;
 		}
 	}
 
@@ -3486,10 +3549,32 @@ void AActor::SetViewAngle(DAngle ang, int fflags)
 		ViewAngles.Yaw = ang;
 		if (player != nullptr && (fflags & SPF_INTERPOLATE))
 		{
-			player->cheats |= CF_INTERPVIEW;
+			player->cheats |= CF_INTERPVIEWANGLES;
 		}
 	}
 
+}
+
+double AActor::GetFOV(double ticFrac)
+{
+	// [B] Disable interpolation when playing online, otherwise it gets vomit inducing
+	if (netgame)
+		return player ? player->FOV : CameraFOV;
+
+	double fov;
+	if (player)
+	{
+		if (player->cheats & CF_NOFOVINTERP)
+			return player->FOV;
+
+		fov = player->FOV;
+	}
+	else
+	{
+		fov = CameraFOV;
+	}
+
+	return PrevFOV.Degrees() * (1 - ticFrac) + fov * ticFrac;
 }
 
 void AActor::SetViewRoll(DAngle r, int fflags)
@@ -3499,7 +3584,7 @@ void AActor::SetViewRoll(DAngle r, int fflags)
 		ViewAngles.Roll = r;
 		if (player != nullptr && (fflags & SPF_INTERPOLATE))
 		{
-			player->cheats |= CF_INTERPVIEW;
+			player->cheats |= CF_INTERPVIEWANGLES;
 		}
 	}
 }
@@ -4500,6 +4585,7 @@ void ConstructActor(AActor *actor, const DVector3 &pos, bool SpawningMapThing)
 	// set subsector and/or block links
 	actor->LinkToWorld (nullptr, SpawningMapThing);
 	actor->ClearInterpolation();
+	actor->ClearFOVInterpolation();
 
 	actor->dropoffz = actor->floorz = actor->Sector->floorplane.ZatPoint(pos);
 	actor->ceilingz = actor->Sector->ceilingplane.ZatPoint(pos);

@@ -78,6 +78,10 @@ struct CutsceneDef;
 
 struct FMapInfoParser
 {
+	FMapInfoParser(FScanner* parent)
+		: sc(parent ? &parent->GetSymbols() : nullptr)
+	{
+	}
 	enum EFormatType
 	{
 		FMT_Unknown,
@@ -411,6 +415,8 @@ struct level_info_t
 	FString		EDName;
 	FString		acsName;
 	bool		fs_nocheckposition;
+	ELightBlendMode lightblendmode;
+	ETonemapMode tonemap;
 	
 	CutsceneDef intro, outro;
 

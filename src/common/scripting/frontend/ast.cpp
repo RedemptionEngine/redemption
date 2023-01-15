@@ -502,6 +502,16 @@ static void PrintMapType(FLispString &out, const ZCC_TreeNode *node)
 	out.Close();
 }
 
+static void PrintMapIteratorType(FLispString &out, const ZCC_TreeNode *node)
+{
+	ZCC_MapIteratorType *tnode = (ZCC_MapIteratorType *)node;
+	out.Open("map-iterator-type");
+	PrintNodes(out, tnode->ArraySize);
+	PrintNodes(out, tnode->KeyType);
+	PrintNodes(out, tnode->ValueType);
+	out.Close();
+}
+
 static void PrintDynArrayType(FLispString &out, const ZCC_TreeNode *node)
 {
 	ZCC_DynArrayType *tnode = (ZCC_DynArrayType *)node;
@@ -806,6 +816,15 @@ static void PrintAssignStmt(FLispString &out, const ZCC_TreeNode *node)
 	out.Close();
 }
 
+static void PrintAssignDeclStmt(FLispString &out, const ZCC_TreeNode *node)
+{
+	ZCC_AssignDeclStmt *snode = (ZCC_AssignDeclStmt *)node;
+	out.Open("assign-stmt-decl");
+	PrintNodes(out, snode->Dests);
+	PrintNodes(out, snode->Sources);
+	out.Close();
+}
+
 static void PrintLocalVarStmt(FLispString &out, const ZCC_TreeNode *node)
 {
 	ZCC_LocalVarStmt *snode = (ZCC_LocalVarStmt *)node;
@@ -955,6 +974,7 @@ static const NodePrinterFunc TreeNodePrinter[] =
 	PrintType,
 	PrintBasicType,
 	PrintMapType,
+	PrintMapIteratorType,
 	PrintDynArrayType,
 	PrintClassType,
 	PrintExpression,
@@ -978,6 +998,7 @@ static const NodePrinterFunc TreeNodePrinter[] =
 	PrintSwitchStmt,
 	PrintCaseStmt,
 	PrintAssignStmt,
+	PrintAssignDeclStmt,
 	PrintLocalVarStmt,
 	PrintFuncParamDecl,
 	PrintConstantDef,

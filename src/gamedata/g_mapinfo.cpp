@@ -302,7 +302,8 @@ void level_info_t::Reset()
 	lightadditivesurfaces = -1;
 	skyrotatevector = FVector3(0, 0, 1);
 	skyrotatevector2 = FVector3(0, 0, 1);
-
+	lightblendmode = ELightBlendMode::DEFAULT;
+	tonemap = ETonemapMode::None;
 }
 
 
@@ -1496,6 +1497,57 @@ DEFINE_MAP_OPTION(lightmode, false)
 	}
 }
 
+DEFINE_MAP_OPTION(lightblendmode, false)
+{
+	parse.ParseAssign();
+	parse.sc.MustGetString();
+
+	if (parse.sc.Compare("Default") || parse.sc.Compare("Clamp"))
+	{
+		info->lightblendmode = ELightBlendMode::DEFAULT;
+	}
+	else if (parse.sc.Compare("ColoredClamp"))
+	{
+		info->lightblendmode = ELightBlendMode::CLAMP_COLOR;
+	}
+	else if (parse.sc.Compare("Unclamped"))
+	{
+		info->lightblendmode = ELightBlendMode::NOCLAMP;
+		if(parse.sc.CheckString(","))
+		{
+			parse.sc.MustGetString();
+			if (parse.sc.Compare("None"))
+			{
+				info->tonemap = ETonemapMode::None;
+			}
+			else if (parse.sc.Compare("Linear"))
+			{
+				info->tonemap = ETonemapMode::Linear;
+			}
+			else if (parse.sc.Compare("Uncharted2"))
+			{
+				info->tonemap = ETonemapMode::Uncharted2;
+			}
+			else if (parse.sc.Compare("HejlDawson"))
+			{
+				info->tonemap = ETonemapMode::HejlDawson;
+			}
+			else if (parse.sc.Compare("Reinhard"))
+			{
+				info->tonemap = ETonemapMode::Reinhard;
+			}
+			else
+			{
+				parse.sc.ScriptMessage("Invalid tonemap %s", parse.sc.String);
+			}
+		}
+	}
+	else
+	{
+		parse.sc.ScriptMessage("Invalid light blend mode %s", parse.sc.String);
+	}
+}
+
 DEFINE_MAP_OPTION(notexturefill, false)
 {
 	if (parse.CheckAssign())
@@ -2331,9 +2383,11 @@ void FMapInfoParser::ParseMapInfo (int lump, level_info_t &gamedefaults, level_i
 						fileSystem.GetResourceFileFullName(fileSystem.GetFileContainer(inclump)), sc.String);
 				}
 			}
-			FScanner saved_sc = sc;
-			ParseMapInfo(inclump, gamedefaults, defaultinfo);
-			sc = saved_sc;
+			// use a new parser object to parse the include. Otherwise we'd have to save the entire FScanner in a local variable which is a lot more messy.
+			FMapInfoParser includer(&sc);
+			includer.format_type = format_type;
+			includer.HexenHack = HexenHack;
+			includer.ParseMapInfo(inclump, gamedefaults, defaultinfo);
 		}
 		else if (sc.Compare("gamedefaults"))
 		{

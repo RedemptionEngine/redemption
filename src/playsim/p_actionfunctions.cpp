@@ -1620,6 +1620,8 @@ enum SPFflag
 	SPF_RELANG =			1 << 4,
 	SPF_NOTIMEFREEZE =		1 << 5,
 	SPF_ROLL =				1 << 6,
+	SPF_REPLACE =           1 << 7,
+	SPF_NO_XY_BILLBOARD =	1 << 8,
 };
 
 DEFINE_ACTION_FUNCTION(AActor, A_SpawnParticle)
@@ -3331,7 +3333,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_Teleport)
 DEFINE_ACTION_FUNCTION(AActor, A_Quake)
 {
 	PARAM_SELF_PROLOGUE(AActor);
-	PARAM_INT		(intensity);
+	PARAM_FLOAT		(intensity);
 	PARAM_INT		(duration);
 	PARAM_INT		(damrad);
 	PARAM_INT		(tremrad);
@@ -3352,9 +3354,9 @@ DEFINE_ACTION_FUNCTION(AActor, A_Quake)
 DEFINE_ACTION_FUNCTION(AActor, A_QuakeEx)
 {
 	PARAM_SELF_PROLOGUE(AActor);
-	PARAM_INT(intensityX);
-	PARAM_INT(intensityY);
-	PARAM_INT(intensityZ);
+	PARAM_FLOAT(intensityX);
+	PARAM_FLOAT(intensityY);
+	PARAM_FLOAT(intensityZ);
 	PARAM_INT(duration);
 	PARAM_INT(damrad);
 	PARAM_INT(tremrad);
@@ -5123,6 +5125,11 @@ DEFINE_ACTION_FUNCTION(AActor, A_ChangeModel)
 
 	if (self == nullptr)
 		ACTION_RETURN_BOOL(false);
+	else if (modeldef != NAME_None && PClass::FindClass(modeldef.GetChars()) == nullptr)
+	{
+		Printf("Attempt to pass invalid modeldef name %s in %s.", modeldef.GetChars(), self->GetCharacterName());
+		ACTION_RETURN_BOOL(false);
+	}
 	else if (modelindex < 0)
 	{
 		Printf("Attempt to pass invalid model index %d in %s, index must be non-negative.", modelindex, self->GetCharacterName());

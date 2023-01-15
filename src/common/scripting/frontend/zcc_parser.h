@@ -98,6 +98,7 @@ enum EZCCTreeNodeType
 	AST_Type,
 	AST_BasicType,
 	AST_MapType,
+	AST_MapIteratorType,
 	AST_DynArrayType,
 	AST_ClassType,
 	AST_Expression,
@@ -121,6 +122,7 @@ enum EZCCTreeNodeType
 	AST_SwitchStmt,
 	AST_CaseStmt,
 	AST_AssignStmt,
+	AST_AssignDeclStmt,
 	AST_LocalVarStmt,
 	AST_FuncParamDecl,
 	AST_ConstantDef,
@@ -367,6 +369,12 @@ struct ZCC_MapType : ZCC_Type
 	ZCC_Type *ValueType;
 };
 
+struct ZCC_MapIteratorType : ZCC_Type
+{
+	ZCC_Type *KeyType;
+	ZCC_Type *ValueType;
+};
+
 struct ZCC_DynArrayType : ZCC_Type
 {
 	ZCC_Type *ElementType;
@@ -522,6 +530,13 @@ struct ZCC_CaseStmt : ZCC_Statement
 struct ZCC_AssignStmt : ZCC_Statement
 {
 	ZCC_Expression *Dests;
+	ZCC_Expression *Sources;
+	int AssignOp;
+};
+
+struct ZCC_AssignDeclStmt : ZCC_Statement
+{
+	ZCC_Identifier *Dests;
 	ZCC_Expression *Sources;
 	int AssignOp;
 };

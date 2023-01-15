@@ -435,6 +435,12 @@ enum EPlayerProperties
 	PROP_FLIGHT = 12, // (Deprecated)
 	PROP_SPEED = 15, // (Deprecated)
 	PROP_BUDDHA = 16,
+	PROP_BUDDHA2 = 17,
+	PROP_FRIGHTENING = 18,
+	PROP_NOCLIP = 19,
+	PROP_NOCLIP2 = 20,
+	PROP_GODMODE = 21,
+	PROP_GODMODE2 = 22,
 }
 
 // Line_SetBlocking
@@ -524,6 +530,7 @@ enum EAngleFlags
 {
 	SPF_FORCECLAMP = 1,
 	SPF_INTERPOLATE = 2,
+	SPF_SCALEDNOLERP = 4,
 };
 
 // flags for A_CheckLOF
@@ -683,14 +690,15 @@ enum ECheckBlockFlags
 
 enum EParticleFlags
 {
-	SPF_FULLBRIGHT =	1,
-	SPF_RELPOS =		1 << 1,
-	SPF_RELVEL =		1 << 2,
-	SPF_RELACCEL =		1 << 3,
-	SPF_RELANG =		1 << 4,
-	SPF_NOTIMEFREEZE =	1 << 5,
-	SPF_ROLL =			1 << 6,
-	SPF_REPLACE =		1 << 7,
+	SPF_FULLBRIGHT =	    1,
+	SPF_RELPOS =		    1 << 1,
+	SPF_RELVEL =		    1 << 2,
+	SPF_RELACCEL =		    1 << 3,
+	SPF_RELANG =		    1 << 4,
+	SPF_NOTIMEFREEZE =	    1 << 5,
+	SPF_ROLL =			    1 << 6,
+	SPF_REPLACE =		    1 << 7,
+	SPF_NO_XY_BILLBOARD =	1 << 8,
 
 	SPF_RELATIVE =	SPF_RELPOS|SPF_RELVEL|SPF_RELACCEL|SPF_RELANG
 };
@@ -1136,6 +1144,9 @@ enum EPlayerCheats
 	CF_TOTALLYFROZEN	= 1 << 12,		// [RH] All players can do is press +use
 	CF_PREDICTING		= 1 << 13,		// [RH] Player movement is being predicted
 	CF_INTERPVIEW		= 1 << 14,		// [RH] view was changed outside of input, so interpolate one frame
+	CF_INTERPVIEWANGLES	= 1 << 15,		// [MR] flag for interpolating view angles without interpolating the entire frame
+	CF_SCALEDNOLERP		= 1 << 15,		// [MR] flag for applying angles changes in the ticrate without interpolating the frame
+	CF_NOFOVINTERP		= 1 << 16,		// [B] Disable FOV interpolation when instantly zooming
 
 	CF_EXTREMELYDEAD	= 1 << 22,		// [RH] Reliably let the status bar know about extreme deaths.
 
