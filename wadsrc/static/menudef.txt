@@ -738,8 +738,8 @@ OptionMenu "MouseOptions" protected
 	}
 	Option "$MOUSEMNU_CURSOR",			"vid_cursor", "Cursors"
 	StaticText 	""
-	Slider "$MOUSEMNU_SENSITIVITY_X",	"m_sensitivity_x", 0.5, 8, 0.25
-	Slider "$MOUSEMNU_SENSITIVITY_Y",	"m_sensitivity_y", 0.5, 8, 0.25
+	Slider "$MOUSEMNU_SENSITIVITY_X",	"m_sensitivity_x", 0.1, 8, 0.05
+	Slider "$MOUSEMNU_SENSITIVITY_Y",	"m_sensitivity_y", 0.1, 8, 0.05
 	StaticText 	""
 	Slider "$MOUSEMNU_TURNSPEED",		"m_yaw", 0, 2.5, 0.1
 	Slider "$MOUSEMNU_MOUSELOOKSPEED",	"m_pitch", 0, 2.5, 0.1
@@ -1347,6 +1347,7 @@ OptionMenu AutomapOptions protected
 	Option "$AUTOMAPMNU_TEXTURED",				"am_textured", "OnOff"
 	Slider "$AUTOMAPMNU_LINEALPHA",				"am_linealpha", 0.1, 1.0, 0.1, 1
 	Slider "$AUTOMAPMNU_LINETHICKNESS",			"am_linethickness", 1, 8, 1, 0
+	Option "$AUTOMAPMNU_LINEANTIALIASING",		"am_lineantialiasing", "OnOff"
 
 	StaticText ""
 	Option "$AUTOMAPMNU_SHOWITEMS",				"am_showitems", "OnOff"
@@ -2303,7 +2304,7 @@ OptionMenu VideoModeMenu protected
 
 	StaticText " "
 	Option "$DSPLYMNU_VSYNC",					"vid_vsync", "OnOff"
-	Option "$VIDMNU_MAXFPS",					"vid_maxfps", "MaxFps"
+	Slider "$VIDMNU_MAXFPS",					"vid_maxfps", 35, 500, 1
 	Option "$DSPLYMNU_CAPFPS",					"cl_capfps", "OffOn"
 	
 	StaticText ""
@@ -2786,6 +2787,7 @@ OptionString "LanguageOptions"
 	"default", "English (US)"
 	"eng", "English (UK)"
 	"cs", "Česky (Czech)"
+	"da", "Dansk (Danish)"
 	"de", "Deutsch (German)"
 	"es", "Español (España) (Castilian Spanish)"
 	"esm", "Español (Latino) (Latin American Spanish)"
