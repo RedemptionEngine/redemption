@@ -66,6 +66,7 @@
 #include "g_game.h"
 #include "s_music.h"
 #include "v_draw.h"
+#include "m_argv.h"
 
 // PUBLIC DATA DEFINITIONS -------------------------------------------------
 
@@ -229,7 +230,7 @@ void S_Init()
 	}
 
 	I_InitSound();
-	I_InitMusic();
+	I_InitMusic(Args->CheckParm("-nomusic") || Args->CheckParm("-nosound"));
 
 	// Heretic and Hexen have sound curve lookup tables. Doom does not.
 	int curvelump = fileSystem.CheckNumForName("SNDCURVE");
@@ -1344,7 +1345,7 @@ void DoomSoundEngine::PrintSoundList()
 		const sfxinfo_t* sfx = soundEngine->GetSfx(FSoundID::fromInt(i));
 		if (sfx->bRandomHeader)
 		{
-			Printf("%3d. %s -> #%d {", i, sfx->name.GetChars(), sfx->link);
+			Printf("%3d. %s -> #%d {", i, sfx->name.GetChars(), sfx->link.index());
 			const FRandomSoundList* list = &S_rnd[sfx->link.index()];
 			for (auto& me : list->Choices)
 			{
@@ -1354,7 +1355,7 @@ void DoomSoundEngine::PrintSoundList()
 		}
 		else if (sfx->UserData[0] & SND_PlayerReserve)
 		{
-			Printf("%3d. %s <<player sound %d>>\n", i, sfx->name.GetChars(), sfx->link);
+			Printf("%3d. %s <<player sound %d>>\n", i, sfx->name.GetChars(), sfx->link.index());
 		}
 		else if (S_sfx[i].lumpnum != -1)
 		{
