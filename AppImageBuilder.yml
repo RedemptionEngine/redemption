@@ -3,11 +3,11 @@ version: 1
 AppDir:
   path: ./AppDir
   app_info:
-    id: com.GZDoom.app
-    name: GZDoom
+    id: com.Redemption.app
+    name: Redemption
     icon: game_icon.png
     version: latest
-    exec: ./gzdoom
+    exec: ./redemption
     exec_args: $@
   apt:
     arch: amd64
