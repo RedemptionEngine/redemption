@@ -171,7 +171,7 @@ DPSprite::DPSprite(player_t *owner, AActor *caller, int id)
   InterpolateTic(false),
   firstTic(true),
   Tics(0),
-  Translation(0),
+  Translation(NO_TRANSLATION),
   Flags(0),
   Owner(owner),
   State(nullptr),
@@ -641,6 +641,19 @@ void P_BobWeapon (player_t *player, float *x, float *y, double ticfrac)
 		DVector2 result;
 		VMReturn ret(&result);
 		VMCall(func, param, 2, &ret, 1);
+		
+		auto inv = player->mo->Inventory;
+		while(inv != nullptr && !(inv->ObjectFlags & OF_EuthanizeMe)) // same loop as ModifyDamage, except it actually checks if it's overriden before calling
+		{
+			auto nextinv = inv->Inventory;
+			IFOVERRIDENVIRTUALPTRNAME(inv, NAME_Inventory, ModifyBob)
+			{
+				VMValue param[] = { (DObject*)inv, result.X, result.Y, ticfrac };
+				VMCall(func, param, 4, &ret, 1);
+			}
+			inv = nextinv;
+		}
+
 		*x = (float)result.X;
 		*y = (float)result.Y;
 		return;
@@ -658,6 +671,19 @@ void P_BobWeapon3D (player_t *player, FVector3 *translation, FVector3 *rotation,
 		returns[0].Vec3At(&t);
 		returns[1].Vec3At(&r);
 		VMCall(func, param, 2, returns, 2);
+
+		auto inv = player->mo->Inventory;
+		while(inv != nullptr && !(inv->ObjectFlags & OF_EuthanizeMe))
+		{
+			auto nextinv = inv->Inventory;
+			IFOVERRIDENVIRTUALPTRNAME(inv, NAME_Inventory, ModifyBob3D)
+			{
+				VMValue param[] = { (DObject*)inv, t.X, t.Y, t.Z, r.X, r.Y, r.Z, ticfrac };
+				VMCall(func, param, 8, returns, 2);
+			}
+			inv = nextinv;
+		}
+
 		translation->X = (float)t.X;
 		translation->Y = (float)t.Y;
 		translation->Z = (float)t.Z;
@@ -997,12 +1023,12 @@ DEFINE_ACTION_FUNCTION(AActor, A_OverlayTranslation)
 		{
 			// an empty string resets to the default
 			// (unlike AActor::SetTranslation, there is no Default block for PSprites, so just set the translation to 0)
-			pspr->Translation = 0;
+			pspr->Translation = NO_TRANSLATION;
 			return 0;
 		}
 
-		int tnum = R_FindCustomTranslation(trname);
-		if (tnum >= 0)
+		auto tnum = R_FindCustomTranslation(trname);
+		if (tnum != INVALID_TRANSLATION)
 		{
 			pspr->Translation = tnum;
 		}
@@ -1352,25 +1378,35 @@ void P_SetSafeFlash(AActor *weapon, player_t *player, FState *flashstate, int in
 					P_SetPsprite(player, PSP_FLASH, flashstate + index, true);
 					return;
 				}
-				else
+				else if (flashstate->DehIndex < 0)
 				{
-					// oh, no! The state is beyond the end of the state table so use the original flash state.
+					// oh, no! The state is beyond the end of the state table so use the original flash state if it does not have a Dehacked index.
 					P_SetPsprite(player, PSP_FLASH, flashstate, true);
 					return;
 				}
+				else break; // no need to continue.
 			}
 			// try again with parent class
 			cls = static_cast<PClassActor *>(cls->ParentClass);
 		}
-		// if we get here the state doesn't seem to belong to any class in the inheritance chain
-		// This can happen with Dehacked if the flash states are remapped. 
-		// The only way to check this would be to go through all Dehacked modifiable actors, convert
-		// their states into a single flat array and find the correct one.
-		// Rather than that, just check to make sure it belongs to something.
-		if (FState::StaticFindStateOwner(flashstate + index) == NULL)
-		{ // Invalid state. With no index offset, it should at least be valid.
-			index = 0;
+		
+		// if we get here the target state doesn't belong to any class in the inheritance chain.
+		// This can happen with Dehacked if the flash states are remapped.
+		// In this case we should check the Dehacked state map to get the proper state.
+		if (flashstate->DehIndex >= 0)
+		{
+			auto pTargetstate = dehExtStates.CheckKey(flashstate->DehIndex + index);
+			if (pTargetstate)
+			{
+				P_SetPsprite(player, PSP_FLASH, *pTargetstate, true);
+				return;
+			}
 		}
+
+		// If we still haven't found anything here, just use the base flash state.
+		// Normally this code should not be reachable.
+		index = 0;
+
 	}
 	P_SetPsprite(player, PSP_FLASH, flashstate + index, true);
 }

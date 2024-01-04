@@ -45,7 +45,6 @@
 #include "floatrect.h"
 #include "refcounted.h"
 
-typedef TMap<int, bool> SpriteHits;
 class FImageSource;
 class FGameTexture;
 class IHardwareTexture;
@@ -217,6 +216,7 @@ protected:
 
 	bool Masked = false;			// Texture (might) have holes
 	bool bHasCanvas = false;
+	bool bHdr = false; 				// only canvas textures for now.
 	int8_t bTranslucent = -1;
 	int8_t areacount = 0;			// this is capped at 4 sections.
 
@@ -252,6 +252,8 @@ public:
 
 	bool isHardwareCanvas() const { return bHasCanvas; }	// There's two here so that this can deal with software canvases in the hardware renderer later.
 	bool isCanvas() const { return bHasCanvas; }
+
+	bool IsHDR() const { return bHdr; }
 
 	int GetSourceLump() { return SourceLump; }	// needed by the scripted GetName method.
 	void SetSourceLump(int sl) { SourceLump  = sl; }
@@ -345,6 +347,12 @@ public:
 	float aspectRatio;
 
 	friend struct FCanvasTextureInfo;
+	friend class FTextureAnimator;
+
+private:
+	void SetHDR(bool hdr) {
+		bHdr = hdr;
+	}
 };
 
 
@@ -370,10 +378,11 @@ class FImageTexture : public FTexture
 {
 	FImageSource* mImage;
 	bool bNoRemap0 = false;
+	int TexFrame = 0;
 protected:
 	void SetFromImage();
 public:
-	FImageTexture(FImageSource* image) noexcept;
+	FImageTexture(FImageSource* image, int frame = 0) noexcept;
 	~FImageTexture();
 	TArray<uint8_t> Get8BitPixels(bool alphatex) override;
 

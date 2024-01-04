@@ -205,7 +205,7 @@ void FCajunMaster::ClearPlayer (int i, bool keepTeam)
 	}
 	players[i].~player_t();
 	::new(&players[i]) player_t;
-	players[i].userinfo.Reset();
+	players[i].userinfo.Reset(i);
 	playeringame[i] = false;
 }
 

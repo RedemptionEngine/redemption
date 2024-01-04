@@ -122,6 +122,8 @@
 #include "i_system.h"  // for SHARE_DIR
 #endif // __unix__
 
+using namespace FileSys;
+
 EXTERN_CVAR(Bool, hud_althud)
 EXTERN_CVAR(Int, vr_mode)
 EXTERN_CVAR(Bool, cl_customizeinvulmap)
@@ -201,11 +203,6 @@ bool M_DemoNoPlay;	// [RH] if true, then skip any demos in the loop
 extern bool insave;
 extern TDeletingArray<FLightDefaults *> LightDefaults;
 extern FName MessageBoxClass;
-
-static const char* iwad_folders[] = { "flats/", "textures/", "hires/", "sprites/", "voxels/", "colormaps/", "acs/", "maps/", "voices/", "patches/", "graphics/", "sounds/", "music/", 
-	"materials/", "models/", "fonts/", "brightmaps/"};
-static const char* iwad_reserved[] = { "mapinfo", "zmapinfo", "umapinfo", "gameinfo", "sndinfo", "sndseq", "sbarinfo", "menudef", "gldefs", "animdefs", "decorate", "zscript", "iwadinfo", "maps/" };
-
 
 EXTERN_CVAR(Float, net_timescale)
 
@@ -311,7 +308,7 @@ CUSTOM_CVAR (String, vid_cursor, "None", CVAR_ARCHIVE | CVAR_NOINITCALL)
 
 	if (!stricmp(self, "None" ) && gameinfo.CursorPic.IsNotEmpty())
 	{
-		res = I_SetCursor(TexMan.GetGameTextureByName(gameinfo.CursorPic));
+		res = I_SetCursor(TexMan.GetGameTextureByName(gameinfo.CursorPic.GetChars()));
 	}
 	else
 	{
@@ -612,6 +609,7 @@ CUSTOM_CVAR(Int, dmflags3, 0, CVAR_SERVERINFO | CVAR_NOINITCALL)
 }
 
 CVAR(Flag, sv_noplayerclip, dmflags3, DF3_NO_PLAYER_CLIP);
+CVAR(Flag, sv_coopsharekeys, dmflags3, DF3_COOP_SHARE_KEYS);
 
 //==========================================================================
 //
@@ -1121,7 +1119,7 @@ void D_Display ()
 			}
 			if ( !skip )
 			{
-				auto tex = TexMan.GetGameTextureByName(gameinfo.PauseSign, true);
+				auto tex = TexMan.GetGameTextureByName(gameinfo.PauseSign.GetChars(), true);
 				double x = (SCREENWIDTH - tex->GetDisplayWidth() * CleanXfac)/2 +
 					tex->GetDisplayLeftOffset() * CleanXfac;
 				DrawTexture(twod, tex, x, 4, DTA_CleanNoMove, true, TAG_DONE);
@@ -1132,7 +1130,7 @@ void D_Display ()
 					pstring.Substitute("%s", players[paused - 1].userinfo.GetName());
 					DrawText(twod, font, CR_RED,
 						(twod->GetWidth() - font->StringWidth(pstring)*CleanXfac) / 2,
-						(tex->GetDisplayHeight() * CleanYfac) + 4, pstring, DTA_CleanNoMove, true, TAG_DONE);
+						(tex->GetDisplayHeight() * CleanYfac) + 4, pstring.GetChars(), DTA_CleanNoMove, true, TAG_DONE);
 				}
 			}
 		}
@@ -1269,13 +1267,21 @@ void D_DoomLoop ()
 				return;
 			}
 		}
-		catch (CRecoverableError &error)
+		catch (const CRecoverableError &error)
 		{
 			if (error.GetMessage ())
 			{
 				Printf (PRINT_NONOTIFY | PRINT_BOLD, "\n%s\n", error.GetMessage());
 			}
 			D_ErrorCleanup ();
+		}
+		catch (const FileSystemException& error) // in case this propagates up to here it should be treated as a recoverable error.
+		{
+			if (error.what())
+			{
+				Printf(PRINT_NONOTIFY | PRINT_BOLD, "\n%s\n", error.what());
+			}
+			D_ErrorCleanup();
 		}
 		catch (CVMAbortException &error)
 		{
@@ -1546,7 +1552,7 @@ void D_DoAdvanceDemo (void)
 		gamestate = GS_DEMOSCREEN;
 		pagename = gameinfo.TitlePage;
 		pagetic = (int)(gameinfo.titleTime * TICRATE);
-		if (!playedtitlemusic) S_ChangeMusic (gameinfo.titleMusic, gameinfo.titleOrder, false);
+		if (!playedtitlemusic) S_ChangeMusic (gameinfo.titleMusic.GetChars(), gameinfo.titleOrder, false);
 		playedtitlemusic = true;
 		demosequence = 3;
 		pagecount = 0;
@@ -1568,7 +1574,7 @@ void D_DoAdvanceDemo (void)
 
 	if (pagename.IsNotEmpty())
 	{
-		Page = TexMan.CheckForTexture(pagename, ETextureType::MiscPatch);
+		Page = TexMan.CheckForTexture(pagename.GetChars(), ETextureType::MiscPatch);
 	}
 }
 
@@ -1747,7 +1753,7 @@ void ParseCVarInfo()
 				}
 			}
 			// Now create the cvar.
-			cvar = customCVar ? C_CreateZSCustomCVar(cvarname, cvartype, cvarflags, customCVarClassName) : C_CreateCVar(cvarname, cvartype, cvarflags);
+			cvar = customCVar ? C_CreateZSCustomCVar(cvarname.GetChars(), cvartype, cvarflags, customCVarClassName) : C_CreateCVar(cvarname.GetChars(), cvartype, cvarflags);
 			if (cvardefault != NULL)
 			{
 				UCVarValue val;
@@ -1763,7 +1769,7 @@ void ParseCVarInfo()
 	// clutter up the cvar space when not playing mods with custom cvars.
 	if (addedcvars)
 	{
-		GameConfig->DoModSetup (gameinfo.ConfigName);
+		GameConfig->DoModSetup (gameinfo.ConfigName.GetChars());
 	}
 }	
 
@@ -1784,8 +1790,8 @@ bool ConsiderPatches (const char *arg)
 	argc = Args->CheckParmList(arg, &args);
 	for (i = 0; i < argc; ++i)
 	{
-		if ( (f = BaseFileSearch(args[i], ".deh", false, GameConfig)) ||
-			 (f = BaseFileSearch(args[i], ".bex", false, GameConfig)) )
+		if ( (f = BaseFileSearch(args[i].GetChars(), ".deh", false, GameConfig)) ||
+			 (f = BaseFileSearch(args[i].GetChars(), ".bex", false, GameConfig)) )
 		{
 			D_LoadDehFile(f);
 		}
@@ -1808,7 +1814,7 @@ FExecList *D_MultiExec (FArgs *list, FExecList *exec)
 	return exec;
 }
 
-static void GetCmdLineFiles(TArray<FString> &wadfiles)
+static void GetCmdLineFiles(std::vector<std::string>& wadfiles)
 {
 	FString *args;
 	int i, argc;
@@ -1816,12 +1822,12 @@ static void GetCmdLineFiles(TArray<FString> &wadfiles)
 	argc = Args->CheckParmList("-file", &args);
 	for (i = 0; i < argc; ++i)
 	{
-		D_AddWildFile(wadfiles, args[i], ".wad", GameConfig);
+		D_AddWildFile(wadfiles, args[i].GetChars(), ".wad", GameConfig);
 	}
 }
 
 
-static FString ParseGameInfo(TArray<FString> &pwads, const char *fn, const char *data, int size)
+static FString ParseGameInfo(std::vector<std::string> &pwads, const char *fn, const char *data, int size)
 {
 	FScanner sc;
 	FString iwad;
@@ -1829,6 +1835,8 @@ static FString ParseGameInfo(TArray<FString> &pwads, const char *fn, const char 
 	bool isDir;
 
 	const char *lastSlash = strrchr (fn, '/');
+	if (lastSlash == NULL)
+	    lastSlash = strrchr (fn, ':');
 
 	sc.OpenMem("GAMEINFO", data, size);
 	while(sc.GetToken())
@@ -1853,20 +1861,19 @@ static FString ParseGameInfo(TArray<FString> &pwads, const char *fn, const char 
 				FString checkpath;
 				if (lastSlash != NULL)
 				{
-					checkpath = FString(fn, (lastSlash - fn) + 1);
-					checkpath += sc.String;
+					checkpath = FString(fn, lastSlash - fn) + '/' + sc.String;
 				}
 				else
 				{
 					checkpath = sc.String;
 				}
-				if (!DirEntryExists(checkpath, &isDir))
+				if (!DirEntryExists(checkpath.GetChars(), &isDir))
 				{
 					pos += D_AddFile(pwads, sc.String, true, pos, GameConfig);
 				}
 				else
 				{
-					pos += D_AddFile(pwads, checkpath, true, pos, GameConfig);
+					pos += D_AddFile(pwads, checkpath.GetChars(), true, pos, GameConfig);
 				}
 			}
 			while (sc.CheckToken(','));
@@ -1948,11 +1955,12 @@ static FString ParseGameInfo(TArray<FString> &pwads, const char *fn, const char 
 
 void GetReserved(LumpFilterInfo& lfi)
 {
-	for (auto p : iwad_folders) lfi.reservedFolders.Push(p);
-	for (auto p : iwad_reserved) lfi.requiredPrefixes.Push(p);
+	lfi.reservedFolders = { "flats/", "textures/", "hires/", "sprites/", "voxels/", "colormaps/", "acs/", "maps/", "voices/", "patches/", "graphics/", "sounds/", "music/",
+	"materials/", "models/", "fonts/", "brightmaps/" };
+	lfi.requiredPrefixes = { "mapinfo", "zmapinfo", "umapinfo", "gameinfo", "sndinfo", "sndseq", "sbarinfo", "menudef", "gldefs", "animdefs", "decorate", "zscript", "iwadinfo", "complvl", "terrain", "maps/" };
 }
 
-static FString CheckGameInfo(TArray<FString> & pwads)
+static FString CheckGameInfo(std::vector<std::string> & pwads)
 {
 	FileSystem check;
 
@@ -1960,16 +1968,15 @@ static FString CheckGameInfo(TArray<FString> & pwads)
 	GetReserved(lfi);
 
 	// Open the entire list as a temporary file system and look for a GAMEINFO lump. The last one will automatically win.
-	check.InitMultipleFiles(pwads, true, &lfi);
-	if (check.GetNumEntries() > 0)
+	if (check.InitMultipleFiles(pwads, &lfi, nullptr))
 	{
 		int num = check.CheckNumForName("GAMEINFO");
 		if (num >= 0)
 		{
 			// Found one!
-			auto data = check.GetFileData(num);
+			auto data = check.ReadFile(num);
 			auto wadname = check.GetResourceFileName(check.GetFileContainer(num));
-			return ParseGameInfo(pwads, wadname, (const char*)data.Data(), data.Size());
+			return ParseGameInfo(pwads, wadname, data.GetString(), (int)data.GetSize());
 		}
 	}
 	return "";
@@ -2020,7 +2027,7 @@ static void D_DoomInit()
 //
 //==========================================================================
 
-static void AddAutoloadFiles(const char *autoname, TArray<FString>& allwads)
+static void AddAutoloadFiles(const char *autoname, std::vector<std::string>& allwads)
 {
 	LumpFilterIWAD.Format("%s.", autoname);	// The '.' is appened to simplify parsing the string 
 
@@ -2067,11 +2074,11 @@ static void AddAutoloadFiles(const char *autoname, TArray<FString>& allwads)
 		file = progdir;
 #endif
 		file += "skins";
-		D_AddDirectory (allwads, file, "*.wad", GameConfig);
+		D_AddDirectory (allwads, file.GetChars(), "*.wad", GameConfig);
 
 #ifdef __unix__
 		file = NicePath("$HOME/" GAME_DIR "/skins");
-		D_AddDirectory (allwads, file, "*.wad", GameConfig);
+		D_AddDirectory (allwads, file.GetChars(), "*.wad", GameConfig);
 #endif	
 
 		// Add common (global) wads
@@ -2083,7 +2090,7 @@ static void AddAutoloadFiles(const char *autoname, TArray<FString>& allwads)
 		while ((len = LumpFilterIWAD.IndexOf('.', lastpos+1)) > 0)
 		{
 			file = LumpFilterIWAD.Left(len) + ".Autoload";
-			D_AddConfigFiles(allwads, file, "*.wad", GameConfig);
+			D_AddConfigFiles(allwads, file.GetChars(), "*.wad", GameConfig);
 			lastpos = len;
 		}
 	}
@@ -2170,7 +2177,7 @@ static void CheckCmdLine()
 	FString mapvalue = Args->TakeValue("+map");
 	if (mapvalue.IsNotEmpty())
 	{
-		if (!P_CheckMapData(mapvalue))
+		if (!P_CheckMapData(mapvalue.GetChars()))
 		{
 			Printf ("Can't find map %s\n", mapvalue.GetChars());
 		}
@@ -2222,9 +2229,8 @@ static void CheckCmdLine()
 		StartScreen->AppendStatusLine("Respawning...");
 	if (autostart)
 	{
-		FString temp;
-		temp.Format ("Warp to map %s, Skill %d ", startmap.GetChars(), gameskill + 1);
-		StartScreen->AppendStatusLine(temp);
+		FStringf temp("Warp to map %s, Skill %d ", startmap.GetChars(), gameskill + 1);
+		StartScreen->AppendStatusLine(temp.GetChars());
 	}
 }
 
@@ -2444,7 +2450,7 @@ void RenameNerve(FileSystem& fileSystem)
 			continue;
 		}
 		for (int icheck = 0; icheck < numnerveversions; icheck++)
-			if (fr->GetLength() == (long)nervesize[icheck])
+			if (fr->GetLength() == (ptrdiff_t)nervesize[icheck])
 				isizecheck = icheck;
 		if (isizecheck == -1)
 		{
@@ -2505,9 +2511,9 @@ void FixMacHexen(FileSystem& fileSystem)
 	FileReader* reader = fileSystem.GetFileReader(fileSystem.GetIwadNum());
 	auto iwadSize = reader->GetLength();
 
-	static const long DEMO_SIZE = 13596228;
-	static const long BETA_SIZE = 13749984;
-	static const long FULL_SIZE = 21078584;
+	static const ptrdiff_t DEMO_SIZE = 13596228;
+	static const ptrdiff_t BETA_SIZE = 13749984;
+	static const ptrdiff_t FULL_SIZE = 21078584;
 
 	if (DEMO_SIZE != iwadSize
 		&& BETA_SIZE != iwadSize
@@ -3067,13 +3073,62 @@ static FILE* D_GetHashFile()
 	return hashfile;
 }
 
+// checks if a file within a directory is allowed to be added to the file system.
+static bool FileNameCheck(const char* base, const char* path)
+{
+	// This one is courtesy of EDuke32. :(
+	// Putting cache files in the application directory is very bad style.
+	// Unfortunately, having a garbage file named "textures" present will cause serious problems down the line.
+	if (!strnicmp(base, "textures", 8))
+	{
+		// do not use fopen. The path may contain non-ASCII characters.
+		FileReader f;
+		if (f.OpenFile(path))
+		{
+			char check[3]{};
+			f.Read(check, 3);
+			if (!memcmp(check, "LZ4", 3)) return false;
+		}
+	}
+	return true;
+}
+
+static int FileSystemPrintf(FSMessageLevel level, const char* fmt, ...)
+{
+	va_list arg;
+	va_start(arg, fmt);
+	FString text;
+	text.VFormat(fmt, arg);
+	switch (level)
+	{
+	case FSMessageLevel::Error:
+		return Printf(TEXTCOLOR_RED "%s", text.GetChars());
+		break;
+	case FSMessageLevel::Warning:
+		Printf(TEXTCOLOR_YELLOW "%s", text.GetChars());
+		break;
+	case FSMessageLevel::Attention:
+		Printf(TEXTCOLOR_BLUE "%s", text.GetChars());
+		break;
+	case FSMessageLevel::Message:
+		Printf("%s", text.GetChars());
+		break;
+	case FSMessageLevel::DebugWarn:
+		DPrintf(DMSG_WARNING, "%s", text.GetChars());
+		break;
+	case FSMessageLevel::DebugNotify:
+		DPrintf(DMSG_NOTIFY, "%s", text.GetChars());
+		break;
+	}
+	return (int)text.Len();
+}
 //==========================================================================
 //
 // D_InitGame
 //
 //==========================================================================
 
-static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArray<FString>& pwads)
+static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allwads, std::vector<std::string>& pwads)
 {
 	SavegameFolder = iwad_info->Autoname;
 	gameinfo.gametype = iwad_info->gametype;
@@ -3098,15 +3153,15 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 	FRandom::StaticClearRandom ();
 
 	FBaseCVar::DisableCallbacks();
-	GameConfig->DoGameSetup (gameinfo.ConfigName);
+	GameConfig->DoGameSetup (gameinfo.ConfigName.GetChars());
 
-	AddAutoloadFiles(iwad_info->Autoname, allwads);
+	AddAutoloadFiles(iwad_info->Autoname.GetChars(), allwads);
 
 	// Process automatically executed files
 	FExecList *exec;
 	FArgs *execFiles = new FArgs;
 	if (!(Args->CheckParm("-noautoexec")))
-		GameConfig->AddAutoexec(execFiles, gameinfo.ConfigName);
+		GameConfig->AddAutoexec(execFiles, gameinfo.ConfigName.GetChars());
 	exec = D_MultiExec(execFiles, NULL);
 	delete execFiles;
 
@@ -3126,7 +3181,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 	if (!batchrun) Printf ("W_Init: Init WADfiles.\n");
 
 	LumpFilterInfo lfi;
-	lfi.dotFilter = LumpFilterIWAD;
+	lfi.dotFilter = LumpFilterIWAD.GetChars();
 
 	static const struct { int match; const char* name; } blanket[] =
 	{
@@ -3138,9 +3193,9 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 
 	for (auto& inf : blanket)
 	{
-		if (gameinfo.gametype & inf.match) lfi.gameTypeFilter.Push(inf.name);
+		if (gameinfo.gametype & inf.match) lfi.gameTypeFilter.push_back(inf.name);
 	}
-	lfi.gameTypeFilter.Push(FStringf("game-%s", GameTypeName()));
+	lfi.gameTypeFilter.push_back(FStringf("game-%s", GameTypeName()).GetChars());
 
 	GetReserved(lfi);
 
@@ -3151,13 +3206,20 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 		FixMacHexen(fileSystem);
 		FindStrifeTeaserVoices(fileSystem);
 	};
-	allwads.Append(std::move(pwads));
+	allwads.insert(
+		allwads.end(),
+		std::make_move_iterator(pwads.begin()),
+		std::make_move_iterator(pwads.end())
+	);
 
 	bool allowduplicates = Args->CheckParm("-allowduplicates");
 	auto hashfile = D_GetHashFile();
-	fileSystem.InitMultipleFiles (allwads, false, &lfi, allowduplicates, hashfile);
-	allwads.Clear();
-	allwads.ShrinkToFit();
+	if (!fileSystem.InitMultipleFiles(allwads, &lfi, FileSystemPrintf, allowduplicates, hashfile))
+	{
+		I_FatalError("FileSystem: no files found");
+	}
+	allwads.clear();
+	allwads.shrink_to_fit();
 	SetMapxxFlag();
 
 	D_GrabCVarDefaults(); //parse DEFCVARS
@@ -3182,7 +3244,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 
 	StartScreen = nostartscreen? nullptr : GetGameStartScreen(per_shader_progress > 0 ? max_progress * 10 / 9 : max_progress + 3);
 	
-	GameConfig->DoKeySetup(gameinfo.ConfigName);
+	GameConfig->DoKeySetup(gameinfo.ConfigName.GetChars());
 
 	// Now that wads are loaded, define mod-specific cvars.
 	ParseCVarInfo();
@@ -3286,7 +3348,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 	}, CheckForHacks, InitBuildTiles);
 	PatchTextures();
 	TexAnim.Init();
-	C_InitConback(TexMan.CheckForTexture(gameinfo.BorderFlat, ETextureType::Flat), true, 0.25);
+	C_InitConback(TexMan.CheckForTexture(gameinfo.BorderFlat.GetChars(), ETextureType::Flat), true, 0.25);
 
 	FixWideStatusBar();
 
@@ -3333,6 +3395,8 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 	if (!batchrun) Printf ("DecalLibrary: Load decals.\n");
 	DecalLibrary.ReadAllDecals ();
 
+	auto numbasesounds = soundEngine->GetNumSounds();
+
 	// Load embedded Dehacked patches
 	D_LoadDehLumps(FromIWAD);
 
@@ -3361,6 +3425,9 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 
 	// Create replacements for dehacked pickups
 	FinishDehPatch();
+
+	auto numdehsounds = soundEngine->GetNumSounds();
+	if (numbasesounds < numdehsounds) S_LockLocalSndinfo(); // DSDHacked sounds are not compatible with map-local SNDINFOs.
 
 	if (!batchrun) Printf("M_Init: Init menus.\n");
 	SetDefaultMenuColors();
@@ -3490,7 +3557,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 			{
 				I_FatalError("Cannot find savegame %s", file.GetChars());
 			}
-			G_LoadGame(file);
+			G_LoadGame(file.GetChars());
 		}
 
 		v = Args->CheckValue("-playdemo");
@@ -3519,11 +3586,11 @@ static int D_InitGame(const FIWADInfo* iwad_info, TArray<FString>& allwads, TArr
 						}
 						CheckWarpTransMap(startmap, true);
 						if (demorecording)
-							G_BeginRecording(startmap);
-						G_InitNew(startmap, false);
+							G_BeginRecording(startmap.GetChars());
+						G_InitNew(startmap.GetChars(), false);
 						if (StoredWarp.IsNotEmpty())
 						{
-							AddCommandString(StoredWarp);
+							AddCommandString(StoredWarp.GetChars());
 							StoredWarp = "";
 						}
 					}
@@ -3613,8 +3680,9 @@ static int D_DoomMain_Internal (void)
 		OnMenuOpen,
 		System_LanguageChanged,
 		OkForLocalization,
-		[]() ->FConfigFile* { return GameConfig; }
-
+		[]() ->FConfigFile* { return GameConfig; },
+		nullptr, 
+		RemapUserTranslation
 	};
 
 	
@@ -3639,7 +3707,7 @@ static int D_DoomMain_Internal (void)
 	FString logfile = Args->TakeValue("+logfile");
 	if (logfile.IsNotEmpty())
 	{
-		execLogfile(logfile);
+		execLogfile(logfile.GetChars());
 	}
 	else if (batchout != NULL && *batchout != 0)
 	{
@@ -3663,7 +3731,7 @@ static int D_DoomMain_Internal (void)
 
 	FString optionalwad = BaseFileSearch(OPTIONALWAD, NULL, true, GameConfig);
 
-	iwad_man = new FIWadManager(basewad, optionalwad);
+	iwad_man = new FIWadManager(basewad.GetChars(), optionalwad.GetChars());
 
 	// Now that we have the IWADINFO, initialize the autoload ini sections.
 	GameConfig->DoAutoloadSetup(iwad_man);
@@ -3683,13 +3751,13 @@ static int D_DoomMain_Internal (void)
 
 		if (iwad_man == NULL)
 		{
-			iwad_man = new FIWadManager(basewad, optionalwad);
+			iwad_man = new FIWadManager(basewad.GetChars(), optionalwad.GetChars());
 		}
 
 		// Load zdoom.pk3 alone so that we can get access to the internal gameinfos before 
 		// the IWAD is known.
 
-		TArray<FString> pwads;
+		std::vector<std::string> pwads;
 		GetCmdLineFiles(pwads);
 		FString iwad = CheckGameInfo(pwads);
 
@@ -3697,18 +3765,21 @@ static int D_DoomMain_Internal (void)
 		// restart is initiated without a defined IWAD assume for now that it's not going to change.
 		if (iwad.IsEmpty()) iwad = lastIWAD;
 
-		TArray<FString> allwads;
+		std::vector<std::string> allwads;
 		
-		const FIWADInfo *iwad_info = iwad_man->FindIWAD(allwads, iwad, basewad, optionalwad);
+		const FIWADInfo *iwad_info = iwad_man->FindIWAD(allwads, iwad.GetChars(), basewad.GetChars(), optionalwad.GetChars());
 		if (!iwad_info) return 0;	// user exited the selection popup via cancel button.
-		if ((iwad_info->flags & GI_SHAREWARE) && pwads.Size() > 0)
+		if ((iwad_info->flags & GI_SHAREWARE) && pwads.size() > 0)
 		{
 			I_FatalError ("You cannot -file with the shareware version. Register!");
 		}
 		lastIWAD = iwad;
 
 		int ret = D_InitGame(iwad_info, allwads, pwads);
-		allwads.Reset();
+		pwads.clear();
+		pwads.shrink_to_fit();
+		allwads.clear();
+		allwads.shrink_to_fit();
 		delete iwad_man;	// now we won't need this anymore
 		iwad_man = NULL;
 		if (ret != 0) return ret;
@@ -3925,7 +3996,7 @@ void I_UpdateWindowTitle()
 
 	// Strip out any color escape sequences before setting a window title
 	TArray<char> copy(titlestr.Len() + 1);
-	const char* srcp = titlestr;
+	const char* srcp = titlestr.GetChars();
 	char* dstp = copy.Data();
 
 	while (*srcp != 0)
@@ -3953,6 +4024,22 @@ void I_UpdateWindowTitle()
 	else
 		I_UpdateDiscordPresence(false, nullptr, nullptr, nullptr);
 	I_SetWindowTitle(copy.Data());
+}
+
+CCMD(fs_dir)
+{
+	int numfiles = fileSystem.GetNumEntries();
+
+	for (int i = 0; i < numfiles; i++)
+	{
+		auto container = fileSystem.GetResourceFileFullName(fileSystem.GetFileContainer(i));
+		auto fn1 = fileSystem.GetFileFullName(i);
+		auto fns = fileSystem.GetFileShortName(i);
+		auto fnid = fileSystem.GetResourceId(i);
+		auto length = fileSystem.FileLength(i);
+		bool hidden = fileSystem.FindFile(fn1) != i;
+		Printf(PRINT_HIGH | PRINT_NONOTIFY, "%s%-64s %-15s (%5d) %10d %s %s\n", hidden ? TEXTCOLOR_RED : TEXTCOLOR_UNTRANSLATED, fn1, fns, fnid, length, container, hidden ? "(h)" : "");
+	}
 }
 
 extern int playerfornode[MAXNETNODES];

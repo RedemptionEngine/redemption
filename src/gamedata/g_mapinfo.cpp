@@ -254,6 +254,7 @@ void level_info_t::Reset()
 	LevelName = "";
 	AuthorName = "";
 	FadeTable = "COLORMAP";
+	CustomColorMap = "COLORMAP";
 	WallHorizLight = -8;
 	WallVertLight = +8;
 	F1Pic = "";
@@ -321,10 +322,10 @@ FString level_info_t::LookupLevelName(uint32_t *langtable)
 	if (flags & LEVEL_LOOKUPLEVELNAME)
 	{
 		const char *thename;
-		const char *lookedup = GStrings.GetString(LevelName, langtable);
+		const char *lookedup = GStrings.GetString(LevelName.GetChars(), langtable);
 		if (lookedup == NULL)
 		{
-			thename = LevelName;
+			thename = LevelName.GetChars();
 		}
 		else
 		{
@@ -381,9 +382,9 @@ level_info_t *level_info_t::CheckLevelRedirect ()
 				if (playeringame[i] && players[i].mo->FindInventory(type))
 				{
 					// check for actual presence of the map.
-					if (P_CheckMapData(RedirectMapName))
+					if (P_CheckMapData(RedirectMapName.GetChars()))
 					{
-						return FindLevelInfo(RedirectMapName);
+						return FindLevelInfo(RedirectMapName.GetChars());
 					}
 					break;
 				}
@@ -403,14 +404,14 @@ level_info_t *level_info_t::CheckLevelRedirect ()
 					if (playeringame[i] && (var = GetCVar(i, RedirectCVAR.GetChars())))
 					{
 						if (var->ToInt())
-							if (P_CheckMapData(RedirectCVARMapName))
-								return FindLevelInfo(RedirectCVARMapName);
+							if (P_CheckMapData(RedirectCVARMapName.GetChars()))
+								return FindLevelInfo(RedirectCVARMapName.GetChars());
 					}
 				}
 			}
 			else if (var->ToInt())
-				if (P_CheckMapData(RedirectCVARMapName))
-					return FindLevelInfo(RedirectCVARMapName);
+				if (P_CheckMapData(RedirectCVARMapName.GetChars()))
+					return FindLevelInfo(RedirectCVARMapName.GetChars());
 		}
 	}
 	return NULL;
@@ -830,7 +831,7 @@ void FMapInfoParser::ParseCluster()
 			else
 			{
 				FStringf testlabel("CLUSTERENTER%d", clusterinfo->cluster);
-				if (GStrings.MatchDefaultString(testlabel, clusterinfo->EnterText))
+				if (GStrings.MatchDefaultString(testlabel.GetChars(), clusterinfo->EnterText.GetChars()))
 				{
 					clusterinfo->EnterText = testlabel;
 					clusterinfo->flags |= CLUSTER_LOOKUPENTERTEXT;
@@ -845,7 +846,7 @@ void FMapInfoParser::ParseCluster()
 			else
 			{
 				FStringf testlabel("CLUSTEREXIT%d", clusterinfo->cluster);
-				if (GStrings.MatchDefaultString(testlabel, clusterinfo->ExitText))
+				if (GStrings.MatchDefaultString(testlabel.GetChars(), clusterinfo->ExitText.GetChars()))
 				{
 					clusterinfo->ExitText = testlabel;
 					clusterinfo->flags |= CLUSTER_LOOKUPEXITTEXT;
@@ -922,7 +923,7 @@ void FMapInfoParser::ParseCluster()
 	// Remap Hexen's CLUS?MSG lumps to the string table, if applicable. The code here only checks what can actually be in an IWAD.
 	if (clusterinfo->flags & CLUSTER_EXITTEXTINLUMP)
 	{
-		int lump = fileSystem.CheckNumForFullName(clusterinfo->ExitText, true);
+		int lump = fileSystem.CheckNumForFullName(clusterinfo->ExitText.GetChars(), true);
 		if (lump > 0)
 		{
 			// Check if this comes from either Hexen.wad or Hexdd.wad and if so, map to the string table.
@@ -931,7 +932,7 @@ void FMapInfoParser::ParseCluster()
 			if (fn && (!stricmp(fn, "HEXEN.WAD") || !stricmp(fn, "HEXDD.WAD")))
 			{
 				FStringf key("TXT_%.5s_%s", fn, clusterinfo->ExitText.GetChars());
-				if (GStrings.exists(key))
+				if (GStrings.exists(key.GetChars()))
 				{
 					clusterinfo->ExitText = key;
 					clusterinfo->flags &= ~CLUSTER_EXITTEXTINLUMP;
@@ -1154,6 +1155,12 @@ DEFINE_MAP_OPTION(fadetable, true)
 	parse.ParseLumpOrTextureName(info->FadeTable);
 }
 
+DEFINE_MAP_OPTION(colormap, true)
+{
+	parse.ParseAssign();
+	parse.ParseLumpOrTextureName(info->CustomColorMap);
+}
+
 DEFINE_MAP_OPTION(evenlighting, true)
 {
 	info->WallVertLight = info->WallHorizLight = 0;
@@ -1199,6 +1206,11 @@ DEFINE_MAP_OPTION(gravity, true)
 	parse.ParseAssign();
 	parse.sc.MustGetFloat();
 	info->gravity = parse.sc.Float;
+}
+
+DEFINE_MAP_OPTION(nogravity, true)
+{
+	info->gravity = DBL_MAX;
 }
 
 DEFINE_MAP_OPTION(aircontrol, true)
@@ -1698,6 +1710,7 @@ enum EMIType
 	MITYPE_CLRFLAGR,
 	MITYPE_SCFLAGSR,
 	MITYPE_COMPATFLAG,
+	MITYPE_CLRCOMPATFLAG,
 };
 
 struct MapInfoFlagHandler
@@ -1808,6 +1821,8 @@ MapFlagHandlers[] =
 	{ "nousersave",						MITYPE_SETFLAGR,	LEVELR_NOSAVEGAME, 0 },
 	{ "allowusersave",					MITYPE_CLRFLAGR,	LEVELR_NOSAVEGAME, 0 },
 	{ "nobotnodes",						MITYPE_IGNORE,	0, 0 },		// Skulltag option: nobotnodes
+	{ "nopassover",						MITYPE_COMPATFLAG, COMPATF_NO_PASSMOBJ, 0 },
+	{ "passover",						MITYPE_CLRCOMPATFLAG, COMPATF_NO_PASSMOBJ, 0 },
 	{ "compat_shorttex",				MITYPE_COMPATFLAG, COMPATF_SHORTTEX, 0 },
 	{ "compat_stairs",					MITYPE_COMPATFLAG, COMPATF_STAIRINDEX, 0 },
 	{ "compat_limitpain",				MITYPE_COMPATFLAG, COMPATF_LIMITPAIN, 0 },
@@ -1980,6 +1995,13 @@ void FMapInfoParser::ParseMapDefinition(level_info_t &info)
 
 			case MITYPE_SCFLAGSR:
 				info.flagsr = (info.flagsr & handler->data2) | handler->data1;
+				break;
+
+			case MITYPE_CLRCOMPATFLAG:
+				info.compatflags &= ~handler->data1;
+				info.compatflags2 &= ~handler->data2;
+				info.compatmask |= handler->data1;
+				info.compatmask2 |= handler->data2;
 				break;
 
 			case MITYPE_COMPATFLAG:
@@ -2166,7 +2188,7 @@ level_info_t *FMapInfoParser::ParseMapHeader(level_info_t &defaultinfo)
 			// This checks for a string labelled with the MapName and if that is identical to what got parsed here
 			// the string table entry will be used.
 
-			if (GStrings.MatchDefaultString(levelinfo->MapName, sc.String))
+			if (GStrings.MatchDefaultString(levelinfo->MapName.GetChars(), sc.String))
 			{
 				levelinfo->flags |= LEVEL_LOOKUPLEVELNAME;
 				levelinfo->LevelName = levelinfo->MapName;
@@ -2183,7 +2205,7 @@ level_info_t *FMapInfoParser::ParseMapHeader(level_info_t &defaultinfo)
 					if (fn && (!stricmp(fn, "HEXEN.WAD") || !stricmp(fn, "HEXDD.WAD")))
 					{
 						FStringf key("TXT_%.5s_%s", fn, levelinfo->MapName.GetChars());
-						if (GStrings.exists(key))
+						if (GStrings.exists(key.GetChars()))
 						{
 							levelinfo->flags |= LEVEL_LOOKUPLEVELNAME;
 							levelinfo->LevelName = key;
@@ -2196,7 +2218,7 @@ level_info_t *FMapInfoParser::ParseMapHeader(level_info_t &defaultinfo)
 
 	// Set up levelnum now so that you can use Teleport_NewMap specials
 	// to teleport to maps with standard names without needing a levelnum.
-	levelinfo->levelnum = GetDefaultLevelNum(levelinfo->MapName);
+	levelinfo->levelnum = GetDefaultLevelNum(levelinfo->MapName.GetChars());
 
 	// Does this map have a song defined via SNDINFO's $map command?
 	// Set that as this map's default music if it does.
@@ -2317,7 +2339,7 @@ void FMapInfoParser::ParseEpisodeInfo ()
 
 	if (optional && !remove)
 	{
-		if (!P_CheckMapData(map))
+		if (!P_CheckMapData(map.GetChars()))
 		{
 			// If the episode is optional and the map does not exist
 			// just ignore this episode definition.
@@ -2602,12 +2624,62 @@ void G_ParseMapInfo (FString basemapinfo)
 	int lump, lastlump = 0;
 	level_info_t gamedefaults;
 
+	int flags1 = 0, flags2 = 0;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		int comp = fileSystem.CheckNumForName("COMPLVL");
+		if (comp >= 0)
+		{
+			auto complvl = fileSystem.ReadFile(comp);
+			auto data = complvl.GetString();
+			int length = fileSystem.FileLength(comp);
+			if (length == 7 && !strnicmp("vanilla", data, 7))
+			{
+				flags1 = 
+					COMPATF_SHORTTEX | COMPATF_STAIRINDEX | COMPATF_USEBLOCKING | COMPATF_NODOORLIGHT | COMPATF_SPRITESORT |
+					COMPATF_TRACE | COMPATF_MISSILECLIP | COMPATF_SOUNDTARGET | COMPATF_DEHHEALTH | COMPATF_CROSSDROPOFF |
+					COMPATF_LIGHT | COMPATF_MASKEDMIDTEX |
+					COMPATF_LIMITPAIN | COMPATF_INVISIBILITY | COMPATF_VILEGHOSTS;
+
+				flags2 =
+					COMPATF2_FLOORMOVE | COMPATF2_EXPLODE1 | COMPATF2_NOMBF21 | COMPATF2_POINTONLINE;
+			}
+			else if (length == 4 && !strnicmp("boom", data, 4))
+			{
+				flags1 =
+					COMPATF_TRACE | COMPATF_SOUNDTARGET | COMPATF_BOOMSCROLL | COMPATF_MISSILECLIP | COMPATF_MASKEDMIDTEX |
+					COMPATF_INVISIBILITY;
+
+				flags2 =
+					COMPATF2_EXPLODE1 | COMPATF2_NOMBF21 | COMPATF2_POINTONLINE;
+			}
+			else if (length == 3 && !strnicmp("mbf", data, 3))
+			{
+				flags1 =
+					COMPATF_TRACE | COMPATF_SOUNDTARGET | COMPATF_BOOMSCROLL | COMPATF_MISSILECLIP | COMPATF_MUSHROOM |
+					COMPATF_MBFMONSTERMOVE | COMPATF_NOBLOCKFRIENDS | COMPATF_MASKEDMIDTEX | COMPATF_INVISIBILITY;
+
+				flags2 =
+					COMPATF2_EXPLODE1 | COMPATF2_AVOID_HAZARDS | COMPATF2_STAYONLIFT | COMPATF2_NOMBF21 | COMPATF2_POINTONLINE;
+			}
+			else if (length == 5 && !strnicmp("mbf21", data, 5))
+			{
+				flags1 =
+					COMPATF_TRACE | COMPATF_SOUNDTARGET | COMPATF_BOOMSCROLL | COMPATF_MISSILECLIP | COMPATF_MUSHROOM |
+					COMPATF_MASKEDMIDTEX | COMPATF_INVISIBILITY;
+
+				flags2 =
+					COMPATF2_EXPLODE1 | COMPATF2_AVOID_HAZARDS | COMPATF2_STAYONLIFT | COMPATF2_POINTONLINE;
+			}
+		}
+	}
+
 	// Parse the default MAPINFO for the current game. This lump *MUST* come from zdoom.pk3.
 	if (basemapinfo.IsNotEmpty())
 	{
 		FMapInfoParser parse;
 		level_info_t defaultinfo;
-		int baselump = fileSystem.GetNumForFullName(basemapinfo);
+		int baselump = fileSystem.GetNumForFullName(basemapinfo.GetChars());
 		if (fileSystem.GetFileContainer(baselump) > 0)
 		{
 			I_FatalError("File %s is overriding core lump %s.", 
@@ -2615,7 +2687,11 @@ void G_ParseMapInfo (FString basemapinfo)
 		}
 		parse.ParseMapInfo(baselump, gamedefaults, defaultinfo);
 	}
-
+	gamedefaults.compatflags |= flags1;
+	gamedefaults.compatmask |= flags1;
+	gamedefaults.compatflags2 |= flags2;
+	gamedefaults.compatmask2 |= flags2;
+	
 	static const char *mapinfonames[] = { "MAPINFO", "ZMAPINFO", "UMAPINFO", NULL };
 	int nindex;
 
@@ -2628,7 +2704,7 @@ void G_ParseMapInfo (FString basemapinfo)
 			// If that exists we need to skip this one.
 
 			int wad = fileSystem.GetFileContainer(lump);
-			int altlump = fileSystem.CheckNumForName("ZMAPINFO", ns_global, wad, true);
+			int altlump = fileSystem.CheckNumForName("ZMAPINFO", FileSys::ns_global, wad, true);
 
 			if (altlump >= 0) continue;
 		}
@@ -2636,9 +2712,9 @@ void G_ParseMapInfo (FString basemapinfo)
 		{
 			// MAPINFO and ZMAPINFO will override UMAPINFO if in the same WAD.
 			int wad = fileSystem.GetFileContainer(lump);
-			int altlump = fileSystem.CheckNumForName("ZMAPINFO", ns_global, wad, true);
+			int altlump = fileSystem.CheckNumForName("ZMAPINFO", FileSys::ns_global, wad, true);
 			if (altlump >= 0) continue;
-			altlump = fileSystem.CheckNumForName("MAPINFO", ns_global, wad, true);
+			altlump = fileSystem.CheckNumForName("MAPINFO", FileSys::ns_global, wad, true);
 			if (altlump >= 0) continue;
 		}
 		if (nindex != 2)
