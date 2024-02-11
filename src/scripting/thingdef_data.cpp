@@ -57,6 +57,7 @@
 #include "a_dynlight.h"
 #include "types.h"
 #include "dictionary.h"
+#include "events.h"
 
 static TArray<FPropertyInfo*> properties;
 static TArray<AFuncDesc> AFTable;
@@ -380,6 +381,8 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(RF2, ONLYVISIBLEINMIRRORS, AActor, renderflags2),
 	DEFINE_FLAG(RF2, BILLBOARDFACECAMERA, AActor, renderflags2),
 	DEFINE_FLAG(RF2, BILLBOARDNOFACECAMERA, AActor, renderflags2),
+	DEFINE_FLAG(RF2, FLIPSPRITEOFFSETX, AActor, renderflags2),
+	DEFINE_FLAG(RF2, FLIPSPRITEOFFSETY, AActor, renderflags2),
 
 	// Bounce flags
 	DEFINE_FLAG2(BOUNCE_Walls, BOUNCEONWALLS, AActor, BounceFlags),
@@ -806,6 +809,10 @@ void InitThingdef()
 	auto frp = NewStruct("FRailParams", nullptr);
 	frp->Size = sizeof(FRailParams);
 	frp->Align = alignof(FRailParams);
+
+	auto netcmdstruct = NewStruct("NetworkCommand", nullptr, true);
+	netcmdstruct->Size = sizeof(FNetworkCommand);
+	netcmdstruct->Align = alignof(FNetworkCommand);
 
 	auto fltd = NewStruct("FLineTraceData", nullptr);
 	fltd->Size = sizeof(FLineTraceData);

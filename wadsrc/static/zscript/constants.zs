@@ -701,17 +701,18 @@ enum ECheckBlockFlags
 
 enum EParticleFlags
 {
-	SPF_FULLBRIGHT =	    1,
-	SPF_RELPOS =		    1 << 1,
-	SPF_RELVEL =		    1 << 2,
-	SPF_RELACCEL =		    1 << 3,
-	SPF_RELANG =		    1 << 4,
-	SPF_NOTIMEFREEZE =	    1 << 5,
-	SPF_ROLL =			    1 << 6,
-	SPF_REPLACE =		    1 << 7,
-	SPF_NO_XY_BILLBOARD =	1 << 8,
+	SPF_FULLBRIGHT				= 1 << 0,
+	SPF_RELPOS					= 1 << 1,
+	SPF_RELVEL					= 1 << 2,
+	SPF_RELACCEL				= 1 << 3,
+	SPF_RELANG					= 1 << 4,
+	SPF_NOTIMEFREEZE			= 1 << 5,
+	SPF_ROLL					= 1 << 6,
+	SPF_REPLACE					= 1 << 7,
+	SPF_NO_XY_BILLBOARD			= 1 << 8,
+	SPF_LOCAL_ANIM				= 1 << 9,
 
-	SPF_RELATIVE =	SPF_RELPOS|SPF_RELVEL|SPF_RELACCEL|SPF_RELANG
+	SPF_RELATIVE				= SPF_RELPOS|SPF_RELVEL|SPF_RELACCEL|SPF_RELANG
 };
 
 //Flags for A_FaceMovementDirection
@@ -1156,8 +1157,8 @@ enum EPlayerCheats
 	CF_PREDICTING		= 1 << 13,		// [RH] Player movement is being predicted
 	CF_INTERPVIEW		= 1 << 14,		// [RH] view was changed outside of input, so interpolate one frame
 	CF_INTERPVIEWANGLES	= 1 << 15,		// [MR] flag for interpolating view angles without interpolating the entire frame
-	CF_SCALEDNOLERP		= 1 << 15,		// [MR] flag for applying angles changes in the ticrate without interpolating the frame
 	CF_NOFOVINTERP		= 1 << 16,		// [B] Disable FOV interpolation when instantly zooming
+	CF_SCALEDNOLERP		= 1 << 17,		// [MR] flag for applying angles changes in the ticrate without interpolating the frame
 
 	CF_EXTREMELYDEAD	= 1 << 22,		// [RH] Reliably let the status bar know about extreme deaths.
 
@@ -1469,3 +1470,26 @@ const WATER_SINK_FACTOR         = 0.125;
 const WATER_SINK_SMALL_FACTOR   = 0.25;
 const WATER_SINK_SPEED          = 0.5;
 const WATER_JUMP_SPEED          = 3.5;
+
+
+// for SetModelFlag/ClearModelFlag
+enum EModelFlags
+{
+	// [BB] Color translations for the model skin are ignored. This is
+	// useful if the skin texture is not using the game palette.
+	MDL_IGNORETRANSLATION			= 1<<0,
+	MDL_PITCHFROMMOMENTUM			= 1<<1,
+	MDL_ROTATING					= 1<<2,
+	MDL_INTERPOLATEDOUBLEDFRAMES	= 1<<3,
+	MDL_NOINTERPOLATION				= 1<<4,
+	MDL_USEACTORPITCH				= 1<<5,
+	MDL_USEACTORROLL				= 1<<6,
+	MDL_BADROTATION					= 1<<7,
+	MDL_DONTCULLBACKFACES			= 1<<8,
+	MDL_USEROTATIONCENTER			= 1<<9,
+	MDL_NOPERPIXELLIGHTING			= 1<<10, // forces a model to not use per-pixel lighting. useful for voxel-converted-to-model objects.
+	MDL_SCALEWEAPONFOV				= 1<<11,	// scale weapon view model with higher user FOVs
+	MDL_MODELSAREATTACHMENTS		= 1<<12,	// any model index after 0 is treated as an attachment, and therefore will use the bone results of index 0
+	MDL_CORRECTPIXELSTRETCH			= 1<<13,	// ensure model does not distort with pixel stretch when pitch/roll is applied
+	MDL_FORCECULLBACKFACES			= 1<<14,
+};

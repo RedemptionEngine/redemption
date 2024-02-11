@@ -348,6 +348,7 @@ struct level_info_t
 	uint32_t	flags2;
 	uint32_t	flags3;
 
+	FString		LightningSound = "world/thunder";
 	uint32_t	flagsr;
 
 	FString		Music;

@@ -250,6 +250,7 @@ void level_info_t::Reset()
 	else
 		flags2 = LEVEL2_LAXMONSTERACTIVATION;
 	flags3 = 0;
+	LightningSound = "world/thunder";
 	Music = "";
 	LevelName = "";
 	AuthorName = "";
@@ -995,6 +996,13 @@ DEFINE_MAP_OPTION(next, true)
 {
 	parse.ParseAssign();
 	parse.ParseNextMap(info->NextMap);
+}
+
+DEFINE_MAP_OPTION(lightningsound, true)
+{
+	parse.ParseAssign();
+	parse.sc.MustGetString();
+	info->LightningSound = parse.sc.String;
 }
 
 DEFINE_MAP_OPTION(author, true)
@@ -2631,7 +2639,7 @@ void G_ParseMapInfo (FString basemapinfo)
 		if (comp >= 0)
 		{
 			auto complvl = fileSystem.ReadFile(comp);
-			auto data = complvl.GetString();
+			auto data = complvl.string();
 			int length = fileSystem.FileLength(comp);
 			if (length == 7 && !strnicmp("vanilla", data, 7))
 			{

@@ -217,7 +217,7 @@ CCMD (removebots)
 		return;
 	}
 
-	Net_WriteByte (DEM_KILLBOTS);
+	Net_WriteInt8 (DEM_KILLBOTS);
 }
 
 CCMD (freeze)
@@ -231,8 +231,8 @@ CCMD (freeze)
 		return;
 	}
 
-	Net_WriteByte (DEM_GENERICCHEAT);
-	Net_WriteByte (CHT_FREEZE);
+	Net_WriteInt8(DEM_GENERICCHEAT);
+	Net_WriteInt8(CHT_FREEZE);
 }
 
 CCMD (listbots)

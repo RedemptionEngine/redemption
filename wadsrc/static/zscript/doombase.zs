@@ -8,7 +8,8 @@ extend struct _
 	native readonly Array<@TerrainDef> Terrains;
 	native int validcount;
 	native play @DehInfo deh;
-	native readonly bool automapactive;
+	native readonly ui bool automapactive;	// is automap enabled?
+	native readonly ui bool viewactive;		// if automap is active, true = main automap, false = overlay automap.
 	native readonly TextureID skyflatnum;
 	native readonly int gametic;
 	native readonly int Net_Arbitrator;
@@ -336,6 +337,7 @@ struct LevelInfo native
 	native readonly int flags;
 	native readonly int flags2;
 	native readonly int flags3;
+	native readonly String LightningSound;
 	native readonly String Music;
 	native readonly String LevelName;
 	native readonly String AuthorName;
@@ -427,6 +429,7 @@ struct LevelLocals native
 	native readonly String F1Pic;
 	native readonly int maptype;
 	native readonly String AuthorName;
+	native String LightningSound;
 	native readonly String Music;
 	native readonly int musicorder;
 	native readonly TextureID skytexture1;
@@ -523,6 +526,7 @@ struct LevelLocals native
 	native String GetChecksum() const;
 
 	native void ChangeSky(TextureID sky1, TextureID sky2 );
+	native void ForceLightning(int mode = 0, sound tempSound = "");
 
 	native SectorTagIterator CreateSectorTagIterator(int tag, line defline = null);
 	native LineIdIterator CreateLineIdIterator(int tag);
@@ -611,6 +615,13 @@ enum EPickStart
 	PPS_NOBLOCKINGCHECK		= 2,
 }
 
+
+enum EMissileHitResult
+{
+	MHIT_DEFAULT = -1,
+	MHIT_DESTROY = 0,
+	MHIT_PASS = 1,
+}
 
 class SectorEffect : Thinker native
 {
