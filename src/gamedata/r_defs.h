@@ -42,6 +42,7 @@
 #include "p_effect.h"
 
 #include "hwrenderer/data/buffers.h"
+#include "hwrenderer/data/hw_levelmesh.h"
 
 // Some more or less basic data types
 // we depend on.
@@ -61,8 +62,7 @@ struct sector_t;
 class AActor;
 struct FSection;
 struct FLevelLocals;
-struct LightmapSurface;
-struct LightProbe;
+struct DoomLevelMeshSurface;
 
 const uint16_t NO_INDEX = 0xffffu;
 const uint32_t NO_SIDE = 0xffffffffu;
@@ -522,6 +522,7 @@ enum
 	SECF_EXIT1			= 4096,
 	SECF_EXIT2			= 8192,
 	SECF_KILLMONSTERS	= 16384,
+	SECF_LM_DYNAMIC		= 32768, // Lightmap needs to be dynamically updated in this sector
 
 	SECF_WASSECRET		= 1 << 30,	// a secret that was discovered
 	SECF_SECRET			= 1 << 31,	// a secret sector
@@ -669,6 +670,7 @@ struct sector_t
 		FTextureID Texture;
 		TextureManipulation TextureFx;
 		FTextureID skytexture[2];
+		uint16_t LightmapSampleDistance;
 	};
 
 
@@ -719,7 +721,7 @@ struct sector_t
 
 	int				vboindex[4];	// VBO indices of the 4 planes this sector uses during rendering. This is only needed for updating plane heights.
 	int				iboindex[4];	// IBO indices of the 4 planes this sector uses during rendering
-	double			vboheight[HW_MAX_PIPELINE_BUFFERS][2];	// Last calculated height for the 2 planes of this actual sector
+	double			vboheight[2];	// Last calculated height for the 2 planes of this actual sector
 	int				vbocount[2];	// Total count of vertices belonging to this sector's planes. This is used when a sector height changes and also contains all attached planes.
 	int				ibocount;		// number of indices per plane (identical for all planes.) If this is -1 the index buffer is not in use.
 
@@ -1026,6 +1028,11 @@ public:
 		return pos == floor? floorplane:ceilingplane;
 	}
 
+	const secplane_t& GetSecPlane(int pos) const
+	{
+		return pos == floor ? floorplane : ceilingplane;
+	}
+
 	bool isSecret() const
 	{
 		return !!(Flags & SECF_SECRET);
@@ -1225,6 +1232,7 @@ struct side_t
 		TextureManipulation TextureFx;
 		PalEntry SpecialColors[2];
 		PalEntry AdditiveColor;
+		uint16_t LightmapSampleDistance;
 
 
 		void InitFrom(const part &other)
@@ -1249,7 +1257,7 @@ struct side_t
 	uint16_t	Flags;
 	int			UDMFIndex;		// needed to access custom UDMF fields which are stored in loading order.
 	FLightNode * lighthead;		// all dynamic lights that may affect this wall
-	LightmapSurface* lightmap;
+	TArrayView<DoomLevelMeshSurface*> surface; // all mesh surfaces belonging to this sidedef
 	seg_t **segs;	// all segs belonging to this sidedef in ascending order. Used for precise rendering
 	int numsegs;
 	int sidenum;
@@ -1512,6 +1520,8 @@ struct line_t : public linebase_t
 	int			healthgroup; // [ZZ] this is the "destructible object" id
 	int			linenum;
 
+	uint16_t	LightmapSampleDistance[3]; // Used only as storage during map loading.
+
 	void setAlpha(double a)
 	{
 		alpha = a;
@@ -1664,7 +1674,7 @@ struct subsector_t
 									// 2: has one-sided walls
 	FPortalCoverage	portalcoverage[2];
 	TArray<DVisualThinker *> sprites;
-	LightmapSurface *lightmap[2];
+	TArrayView<DoomLevelMeshSurface*> surface[2]; // all mesh surfaces belonging to this subsector
 };
 
 
@@ -1707,40 +1717,6 @@ struct FMiniBSP
 	TArray<seg_t> Segs;
 	TArray<subsector_t> Subsectors;
 	TArray<vertex_t> Verts;
-};
-
-// Lightmap data
-
-enum SurfaceType
-{
-	ST_NULL,
-	ST_MIDDLEWALL,
-	ST_UPPERWALL,
-	ST_LOWERWALL,
-	ST_CEILING,
-	ST_FLOOR
-};
-
-struct LightmapSurface
-{
-	SurfaceType Type;
-	subsector_t *Subsector;
-	side_t *Side;
-	sector_t *ControlSector;
-	uint32_t LightmapNum;
-	float *TexCoords;
-};
-
-struct LightProbe
-{
-	float X, Y, Z;
-	float Red, Green, Blue;
-};
-
-struct LightProbeCell
-{
-	LightProbe* FirstProbe = nullptr;
-	int NumProbes = 0;
 };
 
 //

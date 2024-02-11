@@ -383,4 +383,19 @@ TAG_ARTITELEPORT = "$$TXT_ARTITELEPORT";
 TAG_ARTITOMEOFPOWER = "$$TXT_ARTITOMEOFPOWER";
 TAG_ARTITORCH = "$$TXT_ARTITORCH";
 
+// newly added text not in the string table
+
+OPTMNU_SWRENDERER = "Software Renderer";
+OPTMNU_INPUT = "Input Options";
+OPTMNU_MULTIPLAYER = "Multiplayer Options";
+OPTMNU_SYSTEM = "System Options";
+OPTMNU_LIGHT = "Light Options";
+OPTMNU_SPRITE = "Sprite Options";
+GLPREFMNU_CORONAS = "Coronas";
+DSPLYMNU_APPEARANCE = "Appearance";
+DSPLYMNU_ADVANCED = "Advanced Display Options";
+OPTVAL_SHADOWMAP = "Shadowmap";
+OPTVAL_RAYTRACE = "Raytrace";
+GLLIGHTMNU_LIGHTSHADOWS = "Light shadows";
+GLLIGHTMNU_LIGHTSHADOWFILTER = "Shadow filter";
 OPTMNU_SWRENDERER = "$$DSPLYMNU_SWOPT";

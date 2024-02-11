@@ -244,8 +244,6 @@ xx(StartgameConfirmed)
 xx(Loadgamemenu)
 xx(Savegamemenu)
 xx(Optionsmenu)
-xx(OptionsmenuSimple)
-xx(OptionsmenuFull)
 xx(Quitmenu)
 xx(Savemenu)
 xx(EndGameMenu)
@@ -269,6 +267,8 @@ xx(Color)
 xx(Mididevices)
 xx(Aldevices)
 xx(Alresamplers)
+
+xx(Vkdevices)
 
 // Decorate compatibility functions
 xx(BuiltinRandom)

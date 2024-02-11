@@ -47,14 +47,20 @@ const char *GetVersionString();
 #define RC_FILEVERSION 0,0,9999,0
 #define RC_PRODUCTVERSION 0,0,9999,0
 #define RC_PRODUCTVERSION2 VERSIONSTR
+
 // These are for content versioning.
-#define VER_MAJOR 4
-#define VER_MINOR 12
+#define VER_MAJOR 1
+#define VER_MINOR 0
 #define VER_REVISION 0
 
-// This should always refer to the GZDoom version a derived port is based on and not reflect the derived port's version number!
-#define ENG_MAJOR 4
-#define ENG_MINOR 12
+// These are for zscript versioning.
+#define ZSCRIPT_VER_MAJOR 4
+#define ZSCRIPT_VER_MINOR 12
+#define ZSCRIPT_VER_REVISION 0
+
+// This should always refer to the VkDoom version a derived port is based on and not reflect the derived port's version number!
+#define ENG_MAJOR 1
+#define ENG_MINOR 0
 #define ENG_REVISION 0
 
 // Version identifier for network games.

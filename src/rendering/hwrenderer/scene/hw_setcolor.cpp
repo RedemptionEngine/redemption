@@ -31,7 +31,7 @@
 #include "hw_portal.h"
 #include "hw_lighting.h"
 #include "hw_cvars.h"
-
+#include "hw_drawcontext.h"
 
 //==========================================================================
 //
@@ -96,7 +96,7 @@ void SetShaderLight(FRenderState &state, FLevelLocals* Level, float level, float
 //
 //==========================================================================
 
-void SetFog(FRenderState &state, FLevelLocals* Level, ELightMode lightmode, int lightlevel, int rellight, bool fullbright, const FColormap *cmap, bool isadditive)
+void SetFog(FRenderState &state, FLevelLocals* Level, ELightMode lightmode, int lightlevel, int rellight, bool fullbright, const FColormap *cmap, bool isadditive, bool inskybox)
 {
 	PalEntry fogcolor;
 	float fogdensity;
@@ -119,7 +119,7 @@ void SetFog(FRenderState &state, FLevelLocals* Level, ELightMode lightmode, int 
 	}
 
 	// Make fog a little denser when inside a skybox
-	if (portalState.inskybox) fogdensity += fogdensity / 2;
+	if (inskybox) fogdensity += fogdensity / 2;
 
 
 	// no fog in enhanced vision modes!

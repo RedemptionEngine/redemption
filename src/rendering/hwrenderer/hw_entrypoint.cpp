@@ -43,16 +43,17 @@
 #include "g_cvars.h"
 #include "v_draw.h"
 
-#include "hw_lightbuffer.h"
-#include "hw_bonebuffer.h"
 #include "hw_cvars.h"
-#include "hwrenderer/data/hw_viewpointbuffer.h"
 #include "hwrenderer/scene/hw_fakeflat.h"
 #include "hwrenderer/scene/hw_clipper.h"
 #include "hwrenderer/scene/hw_portal.h"
+#include "hwrenderer/scene/hw_drawcontext.h"
 #include "hw_vrmodes.h"
 
 EXTERN_CVAR(Bool, cl_capfps)
+EXTERN_CVAR(Float, r_visibility)
+EXTERN_CVAR(Bool, gl_bandedswlight)
+
 extern bool NoInterpolateView;
 
 static SWSceneDrawer *swdrawer;
@@ -69,16 +70,16 @@ void CleanSWDrawer()
 
 void CollectLights(FLevelLocals* Level)
 {
-	IShadowMap* sm = &screen->mShadowMap;
+	ShadowMap* sm = screen->mShadowMap;
 	int lightindex = 0;
 
 	// Todo: this should go through the blockmap in a spiral pattern around the player so that closer lights are preferred.
 	for (auto light = Level->lights; light; light = light->next)
 	{
-		IShadowMap::LightsProcessed++;
+		ShadowMap::LightsProcessed++;
 		if (light->shadowmapped && light->IsActive() && lightindex < 1024)
 		{
-			IShadowMap::LightsShadowmapped++;
+			ShadowMap::LightsShadowmapped++;
 
 			light->mShadowmapIndex = lightindex;
 			sm->SetLight(lightindex, (float)light->X(), (float)light->Y(), (float)light->Z(), light->GetRadius());
@@ -97,7 +98,6 @@ void CollectLights(FLevelLocals* Level)
 	}
 }
 
-
 //-----------------------------------------------------------------------------
 //
 // Renders one viewpoint in a scene
@@ -110,26 +110,28 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 
 	R_SetupFrame(mainvp, r_viewwindow, camera);
 
-	if (mainview && toscreen && !(camera->Level->flags3 & LEVEL3_NOSHADOWMAP) && camera->Level->HasDynamicLights && gl_light_shadowmap && screen->allowSSBO() && (screen->hwcaps & RFL_SHADER_STORAGE_BUFFER))
+	if (mainview && toscreen && !(camera->Level->flags3 & LEVEL3_NOSHADOWMAP) && camera->Level->HasDynamicLights && gl_light_shadows > 0)
 	{
-		screen->SetAABBTree(camera->Level->aabbTree);
-		screen->mShadowMap.SetCollectLights([=] {
+		screen->mShadowMap->SetAABBTree(camera->Level->aabbTree);
+		screen->mShadowMap->SetCollectLights([=] {
 			CollectLights(camera->Level);
 		});
-		screen->UpdateShadowMap();
+		screen->mShadowMap->PerformUpdate();
 	}
 	else
 	{
 		// null all references to the level if we do not need a shadowmap. This will shortcut all internal calculations without further checks.
-		screen->SetAABBTree(nullptr);
-		screen->mShadowMap.SetCollectLights(nullptr);
+		screen->mShadowMap->SetAABBTree(nullptr);
+		screen->mShadowMap->SetCollectLights(nullptr);
 	}
-
-	screen->SetLevelMesh(camera->Level->levelMesh);
 
 	// Update the attenuation flag of all light defaults for each viewpoint.
 	// This function will only do something if the setting differs.
 	FLightDefaults::SetAttenuationForLevel(!!(camera->Level->flags3 & LEVEL3_ATTENUATE));
+
+	static HWDrawContext mainthread_drawctx;
+
+	hw_ClearFakeFlat(&mainthread_drawctx);
 
 	// Render (potentially) multiple views for stereo 3d
 	// Fixme. The view offsetting should be done with a static table and not require setup of the entire render state for the mode.
@@ -149,7 +151,7 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 			RenderState.EnableDrawBuffers(RenderState.GetPassDrawBufferCount(), true);
 		}
 
-		auto di = HWDrawInfo::StartDrawInfo(mainvp.ViewLevel, nullptr, mainvp, nullptr);
+		auto di = HWDrawInfo::StartDrawInfo(&mainthread_drawctx, mainvp.ViewLevel, nullptr, mainvp, nullptr);
 		auto& vp = di->Viewpoint;
 
 		di->Set3DViewport(RenderState);
@@ -168,7 +170,7 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 		vp.Pos += eye.GetViewShift(vp.HWAngles.Yaw.Degrees());
 		di->SetupView(RenderState, vp.Pos.X, vp.Pos.Y, vp.Pos.Z, false, false);
 
-		di->ProcessScene(toscreen);
+		di->ProcessScene(toscreen, *screen->RenderState());
 
 		if (mainview)
 		{
@@ -274,12 +276,8 @@ void WriteSavePic(player_t* player, FileWriter* file, int width, int height)
 		screen->ImageTransitionScene(true);
 
 		hw_postprocess.SetTonemapMode(level.info ? level.info->tonemap : ETonemapMode::None);
-		hw_ClearFakeFlat();
-		screen->mVertexData->Reset();
-		RenderState.SetVertexBuffer(screen->mVertexData);
-		screen->mLights->Clear();
-		screen->mBones->Clear();
-		screen->mViewpoints->Clear();
+		RenderState.ResetVertices();
+		RenderState.SetFlatVertexBuffer();
 
 		// This shouldn't overwrite the global viewpoint even for a short time.
 		FRenderViewpoint savevp;
@@ -316,8 +314,8 @@ static void CheckTimer(FRenderState &state, uint64_t ShaderStartTime)
 sector_t* RenderView(player_t* player)
 {
 	auto RenderState = screen->RenderState();
-	RenderState->SetVertexBuffer(screen->mVertexData);
-	screen->mVertexData->Reset();
+	RenderState->SetFlatVertexBuffer();
+	RenderState->ResetVertices();
 	hw_postprocess.SetTonemapMode(level.info ? level.info->tonemap : ETonemapMode::None);
 
 	sector_t* retsec;
@@ -330,8 +328,6 @@ sector_t* RenderView(player_t* player)
 	}
 	else
 	{
-		hw_ClearFakeFlat();
-
 		iter_dlightf = iter_dlight = draw_dlight = draw_dlightf = 0;
 
 		checkBenchActive();
@@ -342,10 +338,6 @@ sector_t* RenderView(player_t* player)
 		// Get this before everything else
 		if (cl_capfps || r_NoInterpolate) r_viewpoint.TicFrac = 1.;
 		else r_viewpoint.TicFrac = I_GetTimeFrac();
-
-		screen->mLights->Clear();
-		screen->mBones->Clear();
-		screen->mViewpoints->Clear();
 
 		// NoInterpolateView should have no bearing on camera textures, but needs to be preserved for the main view below.
 		bool saved_niv = NoInterpolateView;

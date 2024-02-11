@@ -1278,6 +1278,7 @@ enum EChangeLevelFlags
 	CHANGELEVEL_NOINTERMISSION = 16,
 	CHANGELEVEL_RESETHEALTH = 32,
 	CHANGELEVEL_PRERAISEWEAPON = 64,
+	CHANGELEVEL_NOAUTOSAVE = 128,
 };
 
 enum ELevelFlags
@@ -1394,6 +1395,10 @@ enum ELevelFlags
 	LEVEL3_AVOIDMELEE			= 0x00020000,	// global flag needed for proper MBF support.
 	LEVEL3_NOJUMPDOWN			= 0x00040000,	// only for MBF21. Inverse of MBF's dog_jumping flag.
 	LEVEL3_LIGHTCREATED			= 0x00080000,	// a light had been created in the last frame
+
+	VKDLEVELFLAG_NOUSERSAVE			= 0x00000001,
+	VKDLEVELFLAG_NOAUTOMAP			= 0x00000002,
+	VKDLEVELFLAG_NOAUTOSAVEONENTER	= 0x00000004,	// don't make an autosave when entering a map
 };
 
 // [RH] Compatibility flags.

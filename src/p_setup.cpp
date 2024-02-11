@@ -379,8 +379,8 @@ void FLevelLocals::ClearLevelData(bool fullgc)
 	if (levelMesh) delete levelMesh;
 	aabbTree = nullptr;
 	levelMesh = nullptr;
-	if (screen)
-		screen->SetAABBTree(nullptr);
+	if (screen && screen->mShadowMap)
+		screen->mShadowMap->SetAABBTree(nullptr);
 }
 
 //==========================================================================
@@ -478,6 +478,8 @@ void P_SetupLevel(FLevelLocals *Level, int position, bool newGame)
 	MapLoader loader(Level);
 	loader.LoadLevel(map, Level->MapName.GetChars(), position);
 	delete map;
+
+	screen->SetLevelMesh(Level->levelMesh);
 
 	// if deathmatch, randomly spawn the active players
 	if (deathmatch)

@@ -271,9 +271,10 @@ enum ELevelFlags : unsigned int
 	LEVEL3_NOJUMPDOWN			= 0x00040000,	// only for MBF21. Inverse of MBF's dog_jumping flag.
 	LEVEL3_LIGHTCREATED			= 0x00080000,	// a light had been created in the last frame
 
-	// these are redemption specific
-	LEVELR_NOSAVEGAME			= 0x00000001,	// Disallow user saves
-	LEVELR_NOAUTOMAP			= 0x00000002,	// Disallow automap
+	// VKDoom custom flags
+	VKDLEVELFLAG_NOUSERSAVE			= 0x00000001,
+	VKDLEVELFLAG_NOAUTOMAP			= 0x00000002,
+	VKDLEVELFLAG_NOAUTOSAVEONENTER	= 0x00000004,	// don't make an autosave when entering a map
 };
 
 
@@ -347,6 +348,8 @@ struct level_info_t
 	int32_t		flags;
 	uint32_t	flags2;
 	uint32_t	flags3;
+
+	uint32_t	vkdflags;
 
 	FString		LightningSound = "world/thunder";
 	uint32_t	flagsr;

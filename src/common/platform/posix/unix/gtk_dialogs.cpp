@@ -64,7 +64,6 @@ typedef enum
 #include "printf.h"
 
 EXTERN_CVAR (Bool, queryiwad);
-EXTERN_CVAR (Int, vid_preferbackend);
 EXTERN_CVAR (Bool, vid_fullscreen);
 
 namespace Gtk {

@@ -37,42 +37,9 @@
 #include "hw_renderstate.h"
 #include "hw_drawinfo.h"
 #include "hw_fakeflat.h"
+#include "hw_drawcontext.h"
 #include "hw_walldispatcher.h"
-
-FMemArena RenderDataAllocator(1024*1024);	// Use large blocks to reduce allocation time.
-
-void ResetRenderDataAllocator()
-{
-	RenderDataAllocator.FreeAll();
-}
-
-//==========================================================================
-//
-//
-//
-//==========================================================================
-class StaticSortNodeArray : public TDeletingArray<SortNode*>
-{
-	unsigned usecount;
-public:
-	unsigned Size() { return usecount; }
-	void Clear() { usecount=0; }
-	void Release(int start) { usecount=start; }
-	SortNode * GetNew();
-};
-
-
-SortNode * StaticSortNodeArray::GetNew()
-{
-	if (usecount==TArray<SortNode*>::Size())
-	{
-		Push(new SortNode);
-	}
-	return operator[](usecount++);
-}
-
-
-static StaticSortNodeArray SortNodes;
+#include "hw_flatdispatcher.h"
 
 //==========================================================================
 //
@@ -81,7 +48,7 @@ static StaticSortNodeArray SortNodes;
 //==========================================================================
 void HWDrawList::Reset()
 {
-	if (sorted) SortNodes.Release(SortNodeStart);
+	if (sorted) drawctx->SortNodes.Release(SortNodeStart);
 	sorted=NULL;
 	walls.Clear();
 	flats.Clear();
@@ -164,9 +131,9 @@ void HWDrawList::MakeSortList()
 	SortNode * p, * n, * c;
 	unsigned i;
 
-	SortNodeStart=SortNodes.Size();
+	SortNodeStart=drawctx->SortNodes.Size();
 	p=NULL;
-	n=SortNodes.GetNew();
+	n=drawctx->SortNodes.GetNew();
 	for(i=0;i<drawitems.Size();i++)
 	{
 		n->itemindex=(int)i;
@@ -175,7 +142,7 @@ void HWDrawList::MakeSortList()
 		p=n;
 		if (i!=drawitems.Size()-1)
 		{
-			c=SortNodes.GetNew();
+			c=drawctx->SortNodes.GetNew();
 			n->next=c;
 			n=c;
 		}
@@ -283,33 +250,7 @@ void HWDrawList::SortWallIntoPlane(HWDrawInfo* di, SortNode * head, SortNode * s
 		HWWall *w = NewWall();
 		*w = *ws;
 
-		// Splitting is done in the shader with clip planes, if available
-		if (screen->hwcaps & RFL_NO_CLIP_PLANES)
-		{
-			ws->vertcount = 0;	// invalidate current vertices.
-			float newtexv = ws->tcs[HWWall::UPLFT].v + ((ws->tcs[HWWall::LOLFT].v - ws->tcs[HWWall::UPLFT].v) / (ws->zbottom[0] - ws->ztop[0])) * (fh->z - ws->ztop[0]);
-			float newlmv = ws->lightuv[HWWall::UPLFT].v + ((ws->lightuv[HWWall::LOLFT].v - ws->lightuv[HWWall::UPLFT].v) / (ws->zbottom[0] - ws->ztop[0])) * (fh->z - ws->ztop[0]);
-
-			// I make the very big assumption here that translucent walls in sloped sectors
-			// and 3D-floors never coexist in the same level - If that were the case this
-			// code would become extremely more complicated.
-			if (!ceiling)
-			{
-				ws->ztop[1] = w->zbottom[1] = ws->ztop[0] = w->zbottom[0] = fh->z;
-				ws->tcs[HWWall::UPRGT].v = w->tcs[HWWall::LORGT].v = ws->tcs[HWWall::UPLFT].v = w->tcs[HWWall::LOLFT].v = newtexv;
-				ws->lightuv[HWWall::UPRGT].v = w->lightuv[HWWall::LORGT].v = ws->lightuv[HWWall::UPLFT].v = w->lightuv[HWWall::LOLFT].v = newlmv;
-			}
-			else
-			{
-				w->ztop[1] = ws->zbottom[1] = w->ztop[0] = ws->zbottom[0] = fh->z;
-				w->tcs[HWWall::UPLFT].v = ws->tcs[HWWall::LOLFT].v = w->tcs[HWWall::UPRGT].v = ws->tcs[HWWall::LORGT].v = newtexv;
-				w->lightuv[HWWall::UPLFT].v = ws->lightuv[HWWall::LOLFT].v = w->lightuv[HWWall::UPRGT].v = ws->lightuv[HWWall::LORGT].v = newlmv;
-			}
-			w->MakeVertices(false);
-			ws->MakeVertices(false);
-		}
-
-		SortNode * sort2 = SortNodes.GetNew();
+		SortNode * sort2 = drawctx->SortNodes.GetNew();
 		memset(sort2, 0, sizeof(SortNode));
 		sort2->itemindex = drawitems.Size() - 1;
 
@@ -348,25 +289,7 @@ void HWDrawList::SortSpriteIntoPlane(SortNode * head, SortNode * sort)
 		HWSprite *s = NewSprite();
 		*s = *ss;
 
-		// Splitting is done in the shader with clip planes, if available.
-		// The fallback here only really works for non-y-billboarded sprites.
-		if (screen->hwcaps & RFL_NO_CLIP_PLANES)
-		{
-			float newtexv = ss->vt + ((ss->vb - ss->vt) / (ss->z2 - ss->z1))*(fh->z - ss->z1);
-
-			if (!ceiling)
-			{
-				ss->z1 = s->z2 = fh->z;
-				ss->vt = s->vb = newtexv;
-			}
-			else
-			{
-				s->z1 = ss->z2 = fh->z;
-				s->vt = ss->vb = newtexv;
-			}
-		}
-
-		SortNode * sort2 = SortNodes.GetNew();
+		SortNode * sort2 = drawctx->SortNodes.GetNew();
 		memset(sort2, 0, sizeof(SortNode));
 		sort2->itemindex = drawitems.Size() - 1;
 
@@ -400,7 +323,7 @@ inline double CalcIntersectionVertex(HWWall *w1, HWWall * w2)
 	return ((ay - cy)*(dx - cx) - (ax - cx)*(dy - cy)) / ((bx - ax)*(dy - cy) - (by - ay)*(dx - cx));
 }
 
-void HWDrawList::SortWallIntoWall(HWDrawInfo *di, SortNode * head,SortNode * sort)
+void HWDrawList::SortWallIntoWall(HWDrawInfo *di, FRenderState& state, SortNode * head,SortNode * sort)
 {
 	HWWall * wh= walls[drawitems[head->itemindex].index];
 	HWWall * ws= walls[drawitems[sort->itemindex].index];
@@ -452,10 +375,10 @@ void HWDrawList::SortWallIntoWall(HWDrawInfo *di, SortNode * head,SortNode * sor
 		w->zbottom[0]=ws->zbottom[1]=izb;
 		w->tcs[HWWall::LOLFT].u = w->tcs[HWWall::UPLFT].u = ws->tcs[HWWall::LORGT].u = ws->tcs[HWWall::UPRGT].u = iu;
 		w->lightuv[HWWall::LOLFT].u = w->lightuv[HWWall::UPLFT].u = ws->lightuv[HWWall::LORGT].u = ws->lightuv[HWWall::UPRGT].u = iu;
-		ws->MakeVertices(false);
-		w->MakeVertices(false);
+		ws->MakeVertices(state, false);
+		w->MakeVertices(state, false);
 
-		SortNode * sort2=SortNodes.GetNew();
+		SortNode * sort2=drawctx->SortNodes.GetNew();
 		memset(sort2,0,sizeof(SortNode));
 		sort2->itemindex=drawitems.Size()-1;
 
@@ -558,7 +481,7 @@ void HWDrawList::SortSpriteIntoWall(HWDrawInfo *di, SortNode * head,SortNode * s
 		s->y1=ss->y2=iy;
 		s->ul=ss->ur=iu;
 
-		SortNode * sort2=SortNodes.GetNew();
+		SortNode * sort2=drawctx->SortNodes.GetNew();
 		memset(sort2,0,sizeof(SortNode));
 		sort2->itemindex=drawitems.Size()-1;
 
@@ -572,16 +495,8 @@ void HWDrawList::SortSpriteIntoWall(HWDrawInfo *di, SortNode * head,SortNode * s
 			head->AddToLeft(sort);
 			head->AddToRight(sort2);
 		}
-		if (screen->BuffersArePersistent())
-		{
-			s->vertexindex = ss->vertexindex = -1;
-		}
-		else
-		{
-			s->CreateVertices(di);
-			ss->CreateVertices(di);
-		}
 
+		s->vertexindex = ss->vertexindex = -1;
 	}
 }
 
@@ -638,7 +553,7 @@ SortNode * HWDrawList::SortSpriteList(SortNode * head)
 //
 //
 //==========================================================================
-SortNode * HWDrawList::DoSort(HWDrawInfo *di, SortNode * head)
+SortNode * HWDrawList::DoSort(HWDrawInfo *di, FRenderState& state, SortNode * head)
 {
 	SortNode * node, * sn, * next;
 
@@ -684,7 +599,7 @@ SortNode * HWDrawList::DoSort(HWDrawInfo *di, SortNode * head)
 				switch(drawitems[node->itemindex].rendertype)
 				{
 				case DrawType_WALL:
-					SortWallIntoWall(di, head,node);
+					SortWallIntoWall(di, state, head, node);
 					break;
 
 				case DrawType_SPRITE:
@@ -701,8 +616,8 @@ SortNode * HWDrawList::DoSort(HWDrawInfo *di, SortNode * head)
 			return SortSpriteList(head);
 		}
 	}
-	if (head->left) head->left=DoSort(di, head->left);
-	if (head->right) head->right=DoSort(di, head->right);
+	if (head->left) head->left=DoSort(di, state, head->left);
+	if (head->right) head->right=DoSort(di, state, head->right);
 	return sn;
 }
 
@@ -711,12 +626,12 @@ SortNode * HWDrawList::DoSort(HWDrawInfo *di, SortNode * head)
 //
 //
 //==========================================================================
-void HWDrawList::Sort(HWDrawInfo *di)
+void HWDrawList::Sort(HWDrawInfo *di, FRenderState& state)
 {
 	reverseSort = !!(di->Level->i_compatflags & COMPATF_SPRITESORT);
     SortZ = di->Viewpoint.Pos.Z;
 	MakeSortList();
-	sorted = DoSort(di, SortNodes[SortNodeStart]);
+	sorted = DoSort(di, state, drawctx->SortNodes[SortNodeStart]);
 }
 
 //==========================================================================
@@ -763,7 +678,7 @@ void HWDrawList::SortFlats()
 
 HWWall *HWDrawList::NewWall()
 {
-	auto wall = (HWWall*)RenderDataAllocator.Alloc(sizeof(HWWall));
+	auto wall = (HWWall*)drawctx->RenderDataAllocator.Alloc(sizeof(HWWall));
 	drawitems.Push(HWDrawItem(DrawType_WALL, walls.Push(wall)));
 	return wall;
 }
@@ -775,7 +690,7 @@ HWWall *HWDrawList::NewWall()
 //==========================================================================
 HWFlat *HWDrawList::NewFlat()
 {
-	auto flat = (HWFlat*)RenderDataAllocator.Alloc(sizeof(HWFlat));
+	auto flat = (HWFlat*)drawctx->RenderDataAllocator.Alloc(sizeof(HWFlat));
 	drawitems.Push(HWDrawItem(DrawType_FLAT,flats.Push(flat)));
 	return flat;
 }
@@ -787,7 +702,7 @@ HWFlat *HWDrawList::NewFlat()
 //==========================================================================
 HWSprite *HWDrawList::NewSprite()
 {	
-	auto sprite = (HWSprite*)RenderDataAllocator.Alloc(sizeof(HWSprite));
+	auto sprite = (HWSprite*)drawctx->RenderDataAllocator.Alloc(sizeof(HWSprite));
 	drawitems.Push(HWDrawItem(DrawType_SPRITE, sprites.Push(sprite)));
 	return sprite;
 }
@@ -804,8 +719,9 @@ void HWDrawList::DoDraw(HWDrawInfo *di, FRenderState &state, bool translucent, i
 	case DrawType_FLAT:
 		{
 			HWFlat * f= flats[drawitems[i].index];
+			HWFlatDispatcher dis(di);
 			RenderFlat.Clock();
-			f->DrawFlat(di, state, translucent);
+			f->DrawFlat(&dis, state, translucent);
 			RenderFlat.Unclock();
 		}
 		break;
@@ -867,10 +783,11 @@ void HWDrawList::DrawWalls(HWDrawInfo *di, FRenderState &state, bool translucent
 //==========================================================================
 void HWDrawList::DrawFlats(HWDrawInfo *di, FRenderState &state, bool translucent)
 {
+	HWFlatDispatcher dis(di);
 	RenderFlat.Clock();
 	for (unsigned i = 0; i<drawitems.Size(); i++)
 	{
-		flats[drawitems[i].index]->DrawFlat(di, state, translucent);
+		flats[drawitems[i].index]->DrawFlat(&dis, state, translucent);
 	}
 	RenderFlat.Unclock();
 }
@@ -946,16 +863,10 @@ void HWDrawList::DrawSorted(HWDrawInfo *di, FRenderState &state)
 
 	if (!sorted)
 	{
-		screen->mVertexData->Map();
-		Sort(di);
-		screen->mVertexData->Unmap();
+		Sort(di, state);
 	}
 	state.ClearClipSplit();
-	state.EnableClipDistance(1, true);
-	state.EnableClipDistance(2, true);
 	DrawSorted(di, state, sorted);
-	state.EnableClipDistance(1, false);
-	state.EnableClipDistance(2, false);
 	state.ClearClipSplit();
 }
 

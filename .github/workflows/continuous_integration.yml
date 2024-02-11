@@ -20,11 +20,6 @@ jobs:
           extra_options: -DCMAKE_TOOLCHAIN_FILE=build/vcpkg/scripts/buildsystems/vcpkg.cmake
           build_type: Debug
 
-        - name: Visual Studio 2019
-          os: windows-2019
-          extra_options: -DCMAKE_TOOLCHAIN_FILE=build/vcpkg/scripts/buildsystems/vcpkg.cmake
-          build_type: Release
-
         - name: macOS
           os: macos-12
           deps_cmdline: brew install libvpx webp
@@ -115,7 +110,7 @@ jobs:
 
     - name: Upload Package
       if: runner.os == 'Windows'  # Remove to store packages of all targets
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         path: build/package
         name: ${{ matrix.config.name }} ${{ matrix.config.build_type }}
@@ -126,3 +121,30 @@ jobs:
       run: |
         git status
         ls -lR build
+
+  deploy:
+    name: Update Latest successful build
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: Visual Studio 2022 Release
+        path: build/vkdoom-prerelease
+
+    - name: Zip artifacts
+      shell: bash
+      run: |
+        cd build
+        zip -r vkdoom-prerelease.zip vkdoom-prerelease
+
+    - name: Update nightly release
+      uses: pyTooling/Actions/releaser@r0
+      with:
+        tag: nightly
+        rm: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+        files: build/vkdoom-prerelease.zip

@@ -22,100 +22,16 @@
 
 #include "vk_shader.h"
 #include "vk_ppshader.h"
-#include "zvulkan/vulkanbuilders.h"
-#include "vulkan/system/vk_renderdevice.h"
+#include "vulkan/vk_renderdevice.h"
+#include <zvulkan/vulkanbuilders.h>
 #include "hw_shaderpatcher.h"
 #include "filesystem.h"
 #include "engineerrors.h"
 #include "version.h"
 #include "cmdlib.h"
 
-bool VkShaderManager::CompileNextShader()
-{
-	const char *mainvp = "shaders/glsl/main.vp";
-	const char *mainfp = "shaders/glsl/main.fp";
-	int i = compileIndex;
-
-	if (compileState == 0)
-	{
-		// regular material shaders
-		
-		VkShaderProgram prog;
-		prog.vert = LoadVertShader(defaultshaders[i].ShaderName, mainvp, defaultshaders[i].Defines);
-		prog.frag = LoadFragShader(defaultshaders[i].ShaderName, mainfp, defaultshaders[i].gettexelfunc, defaultshaders[i].lightfunc, defaultshaders[i].Defines, true, compilePass == GBUFFER_PASS);
-		mMaterialShaders[compilePass].push_back(std::move(prog));
-		
-		compileIndex++;
-		if (defaultshaders[compileIndex].ShaderName == nullptr)
-		{
-			compileIndex = 0;
-			compileState++;
-		}
-	}
-	else if (compileState == 1)
-	{
-		// NAT material shaders
-		
-		VkShaderProgram natprog;
-		natprog.vert = LoadVertShader(defaultshaders[i].ShaderName, mainvp, defaultshaders[i].Defines);
-		natprog.frag = LoadFragShader(defaultshaders[i].ShaderName, mainfp, defaultshaders[i].gettexelfunc, defaultshaders[i].lightfunc, defaultshaders[i].Defines, false, compilePass == GBUFFER_PASS);
-		mMaterialShadersNAT[compilePass].push_back(std::move(natprog));
-
-		compileIndex++;
-		if (compileIndex == SHADER_NoTexture)
-		{
-			compileIndex = 0;
-			compileState++;
-			if (usershaders.Size() == 0) compileState++;
-		}
-	}
-	else if (compileState == 2)
-	{
-		// user shaders
-		
-		const FString& name = ExtractFileBase(usershaders[i].shader.GetChars());
-		FString defines = defaultshaders[usershaders[i].shaderType].Defines + usershaders[i].defines;
-
-		VkShaderProgram prog;
-		prog.vert = LoadVertShader(name, mainvp, defines.GetChars());
-		prog.frag = LoadFragShader(name, mainfp, usershaders[i].shader.GetChars(), defaultshaders[usershaders[i].shaderType].lightfunc, defines.GetChars(), true, compilePass == GBUFFER_PASS);
-		mMaterialShaders[compilePass].push_back(std::move(prog));
-
-		compileIndex++;
-		if (compileIndex >= (int)usershaders.Size())
-		{
-			compileIndex = 0;
-			compileState++;
-		}
-	}
-	else if (compileState == 3)
-	{
-		// Effect shaders
-		
-		VkShaderProgram prog;
-		prog.vert = LoadVertShader(effectshaders[i].ShaderName, effectshaders[i].vp, effectshaders[i].defines);
-		prog.frag = LoadFragShader(effectshaders[i].ShaderName, effectshaders[i].fp1, effectshaders[i].fp2, effectshaders[i].fp3, effectshaders[i].defines, true, compilePass == GBUFFER_PASS);
-		mEffectShaders[compilePass].push_back(std::move(prog));
-
-		compileIndex++;
-		if (compileIndex >= MAX_EFFECTS)
-		{
-			compileIndex = 0;
-			compilePass++;
-			if (compilePass == MAX_PASS_TYPES)
-			{
-				compileIndex = -1; // we're done.
-				return true;
-			}
-			compileState = 0;
-		}
-	}
-	return false;
-}
-
 VkShaderManager::VkShaderManager(VulkanRenderDevice* fb) : fb(fb)
 {
-	//CompileNextShader();
 }
 
 VkShaderManager::~VkShaderManager()
@@ -128,339 +44,323 @@ void VkShaderManager::Deinit()
 		RemoveVkPPShader(PPShaders.back());
 }
 
-VkShaderProgram *VkShaderManager::GetEffect(int effect, EPassType passType)
+VkShaderProgram* VkShaderManager::Get(const VkShaderKey& key)
 {
-	if (compileIndex == -1 && effect >= 0 && effect < MAX_EFFECTS && mEffectShaders[passType][effect].frag)
+	auto& program = programs[key];
+	if (program.frag)
+		return &program;
+
+	const char* mainvp = "shaders/scene/vert_main.glsl";
+	const char* mainfp = "shaders/scene/frag_main.glsl";
+
+	if (key.SpecialEffect != EFF_NONE)
 	{
-		return &mEffectShaders[passType][effect];
-	}
-	return nullptr;
-}
-
-VkShaderProgram *VkShaderManager::Get(unsigned int eff, bool alphateston, EPassType passType)
-{
-	if (compileIndex != -1)
-		return &mMaterialShaders[0][0];
-	// indices 0-2 match the warping modes, 3 no texture, the following are custom
-	if (!alphateston && eff < SHADER_NoTexture)
-	{
-		return &mMaterialShadersNAT[passType][eff];	// Non-alphatest shaders are only created for default, warp1+2. The rest won't get used anyway
-	}
-	else if (eff < (unsigned int)mMaterialShaders[passType].size())
-	{
-		return &mMaterialShaders[passType][eff];
-	}
-	return nullptr;
-}
-
-static const char *shaderBindings = R"(
-
-	layout(set = 0, binding = 0) uniform sampler2D ShadowMap;
-	layout(set = 0, binding = 1) uniform sampler2DArray LightMap;
-	#ifdef SUPPORTS_RAYTRACING
-	layout(set = 0, binding = 2) uniform accelerationStructureEXT TopLevelAS;
-	#endif
-
-	// This must match the HWViewpointUniforms struct
-	layout(set = 1, binding = 0, std140) uniform ViewpointUBO {
-		mat4 ProjectionMatrix;
-		mat4 ViewMatrix;
-		mat4 NormalViewMatrix;
-
-		vec4 uCameraPos;
-		vec4 uClipLine;
-
-		float uGlobVis;			// uGlobVis = R_GetGlobVis(r_visibility) / 32.0
-		int uPalLightLevels;	
-		int uViewHeight;		// Software fuzz scaling
-		float uClipHeight;
-		float uClipHeightDirection;
-		int uShadowmapFilter;
-		
-		int uLightBlendMode;
-	};
-
-	layout(set = 1, binding = 1, std140) uniform MatricesUBO {
-		mat4 ModelMatrix;
-		mat4 NormalModelMatrix;
-		mat4 TextureMatrix;
-	};
-
-	struct StreamData
-	{
-		vec4 uObjectColor;
-		vec4 uObjectColor2;
-		vec4 uDynLightColor;
-		vec4 uAddColor;
-		vec4 uTextureAddColor;
-		vec4 uTextureModulateColor;
-		vec4 uTextureBlendColor;
-		vec4 uFogColor;
-		float uDesaturationFactor;
-		float uInterpolationFactor;
-		float timer; // timer data for material shaders
-		int useVertexData;
-		vec4 uVertexColor;
-		vec4 uVertexNormal;
-
-		vec4 uGlowTopPlane;
-		vec4 uGlowTopColor;
-		vec4 uGlowBottomPlane;
-		vec4 uGlowBottomColor;
-
-		vec4 uGradientTopPlane;
-		vec4 uGradientBottomPlane;
-
-		vec4 uSplitTopPlane;
-		vec4 uSplitBottomPlane;
-
-		vec4 uDetailParms;
-		vec4 uNpotEmulation;
-		vec4 padding1, padding2, padding3;
-	};
-
-	layout(set = 1, binding = 2, std140) uniform StreamUBO {
-		StreamData data[MAX_STREAM_DATA];
-	};
-
-	// light buffers
-	layout(set = 1, binding = 3, std430) buffer LightBufferSSO
-	{
-	    vec4 lights[];
-	};
-
-	// bone matrix buffers
-	layout(set = 1, binding = 4, std430) buffer BoneBufferSSO
-	{
-	    mat4 bones[];
-	};
-
-	// textures
-	layout(set = 2, binding = 0) uniform sampler2D tex;
-	layout(set = 2, binding = 1) uniform sampler2D texture2;
-	layout(set = 2, binding = 2) uniform sampler2D texture3;
-	layout(set = 2, binding = 3) uniform sampler2D texture4;
-	layout(set = 2, binding = 4) uniform sampler2D texture5;
-	layout(set = 2, binding = 5) uniform sampler2D texture6;
-	layout(set = 2, binding = 6) uniform sampler2D texture7;
-	layout(set = 2, binding = 7) uniform sampler2D texture8;
-	layout(set = 2, binding = 8) uniform sampler2D texture9;
-	layout(set = 2, binding = 9) uniform sampler2D texture10;
-	layout(set = 2, binding = 10) uniform sampler2D texture11;
-	layout(set = 2, binding = 11) uniform sampler2D texture12;
-
-	// This must match the PushConstants struct
-	layout(push_constant) uniform PushConstants
-	{
-		int uTextureMode;
-		float uAlphaThreshold;
-		vec2 uClipSplit;
-
-		// Lighting + Fog
-		float uLightLevel;
-		float uFogDensity;
-		float uLightFactor;
-		float uLightDist;
-		int uFogEnabled;
-
-		// dynamic lights
-		int uLightIndex;
-
-		// Blinn glossiness and specular level
-		vec2 uSpecularMaterial;
-
-		// bone animation
-		int uBoneIndexBase;
-
-		int uDataIndex;
-		int padding2, padding3;
-	};
-
-	// material types
-	#if defined(SPECULAR)
-	#define normaltexture texture2
-	#define speculartexture texture3
-	#define brighttexture texture4
-	#define detailtexture texture5
-	#define glowtexture texture6
-	#elif defined(PBR)
-	#define normaltexture texture2
-	#define metallictexture texture3
-	#define roughnesstexture texture4
-	#define aotexture texture5
-	#define brighttexture texture6
-	#define detailtexture texture7
-	#define glowtexture texture8
-	#else
-	#define brighttexture texture2
-	#define detailtexture texture3
-	#define glowtexture texture4
-	#endif
-
-	#define uObjectColor data[uDataIndex].uObjectColor
-	#define uObjectColor2 data[uDataIndex].uObjectColor2
-	#define uDynLightColor data[uDataIndex].uDynLightColor
-	#define uAddColor data[uDataIndex].uAddColor
-	#define uTextureBlendColor data[uDataIndex].uTextureBlendColor
-	#define uTextureModulateColor data[uDataIndex].uTextureModulateColor
-	#define uTextureAddColor data[uDataIndex].uTextureAddColor
-	#define uFogColor data[uDataIndex].uFogColor
-	#define uDesaturationFactor data[uDataIndex].uDesaturationFactor
-	#define uInterpolationFactor data[uDataIndex].uInterpolationFactor
-	#define timer data[uDataIndex].timer
-	#define useVertexData data[uDataIndex].useVertexData
-	#define uVertexColor data[uDataIndex].uVertexColor
-	#define uVertexNormal data[uDataIndex].uVertexNormal
-	#define uGlowTopPlane data[uDataIndex].uGlowTopPlane
-	#define uGlowTopColor data[uDataIndex].uGlowTopColor
-	#define uGlowBottomPlane data[uDataIndex].uGlowBottomPlane
-	#define uGlowBottomColor data[uDataIndex].uGlowBottomColor
-	#define uGradientTopPlane data[uDataIndex].uGradientTopPlane
-	#define uGradientBottomPlane data[uDataIndex].uGradientBottomPlane
-	#define uSplitTopPlane data[uDataIndex].uSplitTopPlane
-	#define uSplitBottomPlane data[uDataIndex].uSplitBottomPlane
-	#define uDetailParms data[uDataIndex].uDetailParms
-	#define uNpotEmulation data[uDataIndex].uNpotEmulation
-
-	#define SUPPORTS_SHADOWMAPS
-	#define VULKAN_COORDINATE_SYSTEM
-	#define HAS_UNIFORM_VERTEX_DATA
-
-	// GLSL spec 4.60, 8.15. Noise Functions
-	// https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.60.pdf
-	//  "The noise functions noise1, noise2, noise3, and noise4 have been deprecated starting with version 4.4 of GLSL.
-	//   When not generating SPIR-V they are defined to return the value 0.0 or a vector whose components are all 0.0.
-	//   When generating SPIR-V the noise functions are not declared and may not be used."
-	// However, we need to support mods with custom shaders created for OpenGL renderer
-	float noise1(float) { return 0; }
-	vec2 noise2(vec2) { return vec2(0); }
-	vec3 noise3(vec3) { return vec3(0); }
-	vec4 noise4(vec4) { return vec4(0); }
-)";
-
-std::unique_ptr<VulkanShader> VkShaderManager::LoadVertShader(FString shadername, const char *vert_lump, const char *defines)
-{
-	FString code = GetTargetGlslVersion();
-	code << defines;
-	code << "\n#define MAX_STREAM_DATA " << std::to_string(MAX_STREAM_DATA).c_str() << "\n";
-#ifdef NPOT_EMULATION
-	code << "#define NPOT_EMULATION\n";
-#endif
-	code << shaderBindings;
-	if (!fb->device->EnabledFeatures.Features.shaderClipDistance) code << "#define NO_CLIPDISTANCE_SUPPORT\n";
-	code << "#line 1\n";
-	code << LoadPrivateShaderLump(vert_lump).GetChars() << "\n";
-
-	return ShaderBuilder()
-		.Type(ShaderType::Vertex)
-		.AddSource(shadername.GetChars(), code.GetChars())
-		.DebugName(shadername.GetChars())
-		.Create(shadername.GetChars(), fb->device.get());
-}
-
-std::unique_ptr<VulkanShader> VkShaderManager::LoadFragShader(FString shadername, const char *frag_lump, const char *material_lump, const char *light_lump, const char *defines, bool alphatest, bool gbufferpass)
-{
-	FString code = GetTargetGlslVersion();
-	if (fb->RaytracingEnabled())
-		code << "\n#define SUPPORTS_RAYTRACING\n";
-	code << defines;
-	code << "\n$placeholder$";	// here the code can later add more needed #defines.
-	code << "\n#define MAX_STREAM_DATA " << std::to_string(MAX_STREAM_DATA).c_str() << "\n";
-#ifdef NPOT_EMULATION
-	code << "#define NPOT_EMULATION\n";
-#endif
-	code << shaderBindings;
-	FString placeholder = "\n";
-
-	if (!fb->device->EnabledFeatures.Features.shaderClipDistance) code << "#define NO_CLIPDISTANCE_SUPPORT\n";
-	if (!alphatest) code << "#define NO_ALPHATEST\n";
-	if (gbufferpass) code << "#define GBUFFER_PASS\n";
-
-	code << "\n#line 1\n";
-	code << LoadPrivateShaderLump(frag_lump).GetChars() << "\n";
-
-	if (material_lump)
-	{
-		if (material_lump[0] != '#')
+		struct FEffectShader
 		{
-			FString pp_code = LoadPublicShaderLump(material_lump);
+			const char* ShaderName;
+			const char* fp1;
+			const char* fp2;
+			const char* fp3;
+			const char* fp4;
+			const char* defines;
+		};
 
-			if (pp_code.IndexOf("ProcessMaterial") < 0 && pp_code.IndexOf("SetupMaterial") < 0)
-			{
-				// this looks like an old custom hardware shader.
-				// add ProcessMaterial function that calls the older ProcessTexel function
+		static const FEffectShader effectshaders[] =
+		{
+			{ "fogboundary",  "shaders/scene/frag_fogboundary.glsl", nullptr,                               nullptr,                                nullptr,                                "#define NO_ALPHATEST\n" },
+			{ "spheremap",    "shaders/scene/frag_main.glsl",        "shaders/scene/material_default.glsl", "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl", "#define SPHEREMAP\n#define NO_ALPHATEST\n" },
+			{ "burn",         "shaders/scene/frag_burn.glsl",        nullptr,                               nullptr,                                nullptr,                                "#define SIMPLE\n#define NO_ALPHATEST\n" },
+			{ "stencil",      "shaders/scene/frag_stencil.glsl",     nullptr,                               nullptr,                                nullptr,                                "#define SIMPLE\n#define NO_ALPHATEST\n" },
+			{ "portal",       "shaders/scene/frag_portal.glsl",      nullptr,                               nullptr,                                nullptr,                                "#define SIMPLE\n#define NO_ALPHATEST\n" },
+		};
 
-				if (pp_code.IndexOf("GetTexCoord") >= 0)
-				{
-					code << "\n" << LoadPrivateShaderLump("shaders/glsl/func_defaultmat2.fp").GetChars() << "\n";
-				}
-				else
-				{
-					code << "\n" << LoadPrivateShaderLump("shaders/glsl/func_defaultmat.fp").GetChars() << "\n";
-					if (pp_code.IndexOf("ProcessTexel") < 0)
-					{
-						// this looks like an even older custom hardware shader.
-						// We need to replace the ProcessTexel call to make it work.
+		const auto& desc = effectshaders[key.SpecialEffect];
+		program.vert = LoadVertShader(desc.ShaderName, mainvp, desc.defines, key.UseLevelMesh);
+		if (!key.NoFragmentShader)
+			program.frag = LoadFragShader(desc.ShaderName, desc.fp1, desc.fp2, desc.fp3, desc.fp4, desc.defines, key);
+	}
+	else
+	{
+		struct FDefaultShader
+		{
+			const char* ShaderName;
+			const char* material_lump;
+			const char* mateffect_lump;
+			const char* lightmodel_lump;
+			const char* Defines;
+		};
 
-						code.Substitute("material.Base = ProcessTexel();", "material.Base = Process(vec4(1.0));");
-					}
-				}
+		// Note: the MaterialShaderIndex enum needs to be updated whenever this array is modified.
+		static const FDefaultShader defaultshaders[] =
+		{
+			{"Default",	            "shaders/scene/material_default.glsl",                 "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Warp 1",	            "shaders/scene/material_default.glsl",                 "shaders/scene/mateffect_warp1.glsl",   "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Warp 2",	            "shaders/scene/material_default.glsl",                 "shaders/scene/mateffect_warp2.glsl",   "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Specular",            "shaders/scene/material_spec.glsl",                    "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_specular.glsl", "#define SPECULAR\n#define NORMALMAP\n"},
+			{"PBR",                 "shaders/scene/material_pbr.glsl",                     "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_pbr.glsl",      "#define PBR\n#define NORMALMAP\n"},
+			{"Paletted",	        "shaders/scene/material_paletted.glsl",                "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_nolights.glsl", "#define PALETTE_EMULATION\n"},
+			{"No Texture",          "shaders/scene/material_notexture.glsl",               "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   "#define NO_LAYERS\n"},
+			{"Basic Fuzz",          "shaders/scene/material_fuzz_standard.glsl",           "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Smooth Fuzz",         "shaders/scene/material_fuzz_smooth.glsl",             "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Swirly Fuzz",         "shaders/scene/material_fuzz_swirly.glsl",             "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Translucent Fuzz",    "shaders/scene/material_fuzz_smoothtranslucent.glsl",  "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Jagged Fuzz",         "shaders/scene/material_fuzz_jagged.glsl",             "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Noise Fuzz",          "shaders/scene/material_fuzz_noise.glsl",              "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Smooth Noise Fuzz",   "shaders/scene/material_fuzz_smoothnoise.glsl",        "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   ""},
+			{"Software Fuzz",       "shaders/scene/material_fuzz_software.glsl",           "shaders/scene/mateffect_default.glsl", "shaders/scene/lightmodel_normal.glsl",   ""},
+			{nullptr,nullptr,nullptr,nullptr}
+		};
 
-				if (pp_code.IndexOf("ProcessLight") >= 0)
-				{
-					// The ProcessLight signatured changed. Forward to the old one.
-					code << "\nvec4 ProcessLight(vec4 color);\n";
-					code << "\nvec4 ProcessLight(Material material, vec4 color) { return ProcessLight(color); }\n";
-				}
-			}
-
-			code << "\n#line 1\n";
-			code << RemoveLegacyUserUniforms(pp_code).GetChars();
-			code.Substitute("gl_TexCoord[0]", "vTexCoord");	// fix old custom shaders.
-
-			if (pp_code.IndexOf("ProcessLight") < 0)
-			{
-				code << "\n" << LoadPrivateShaderLump("shaders/glsl/func_defaultlight.fp").GetChars() << "\n";
-			}
-
-			// ProcessMaterial must be considered broken because it requires the user to fill in data they possibly cannot know all about.
-			if (pp_code.IndexOf("ProcessMaterial") >= 0 && pp_code.IndexOf("SetupMaterial") < 0)
-			{
-				// This reactivates the old logic and disables all features that cannot be supported with that method.
-				placeholder << "#define LEGACY_USER_SHADER\n";
-			}
+		if (key.EffectState < FIRST_USER_SHADER)
+		{
+			const auto& desc = defaultshaders[key.EffectState];
+			program.vert = LoadVertShader(desc.ShaderName, mainvp, desc.Defines, key.UseLevelMesh);
+			if (!key.NoFragmentShader)
+				program.frag = LoadFragShader(desc.ShaderName, mainfp, desc.material_lump, desc.mateffect_lump, desc.lightmodel_lump, desc.Defines, key);
 		}
 		else
 		{
-			// material_lump is not a lump name but the source itself (from generated shaders)
-			code << (material_lump + 1) << "\n";
+			const auto& desc = usershaders[key.EffectState - FIRST_USER_SHADER];
+			const FString& name = ExtractFileBase(desc.shader.GetChars());
+			FString defines = defaultshaders[desc.shaderType].Defines + desc.defines;
+
+			program.vert = LoadVertShader(name, mainvp, defines.GetChars(), key.UseLevelMesh);
+			if (!key.NoFragmentShader)
+				program.frag = LoadFragShader(name, mainfp, desc.shader.GetChars(), defaultshaders[desc.shaderType].mateffect_lump, defaultshaders[desc.shaderType].lightmodel_lump, defines.GetChars(), key);
 		}
 	}
-	code.Substitute("$placeholder$", placeholder);
+	return &program;
+}
 
-	if (light_lump)
+std::unique_ptr<VulkanShader> VkShaderManager::LoadVertShader(FString shadername, const char *vert_lump, const char *defines, bool levelmesh)
+{
+	FString definesBlock;
+	definesBlock << defines;
+	definesBlock << "\n#define MAX_SURFACE_UNIFORMS " << std::to_string(MAX_SURFACE_UNIFORMS).c_str() << "\n";
+	definesBlock << "#define MAX_LIGHT_DATA " << std::to_string(MAX_LIGHT_DATA).c_str() << "\n";
+	definesBlock << "#define MAX_FOGBALL_DATA " << std::to_string(MAX_FOGBALL_DATA).c_str() << "\n";
+#ifdef NPOT_EMULATION
+	definesBlock << "#define NPOT_EMULATION\n";
+#endif
+	if (!fb->GetDevice()->EnabledFeatures.Features.shaderClipDistance)
 	{
-		code << "\n#line 1\n";
-		code << LoadPrivateShaderLump(light_lump).GetChars();
+		definesBlock << "#define NO_CLIPDISTANCE_SUPPORT\n";
+	}
+
+	if (levelmesh)
+		definesBlock << "#define USE_LEVELMESH\n";
+
+	FString layoutBlock;
+	layoutBlock << LoadPrivateShaderLump("shaders/scene/layout_shared.glsl").GetChars() << "\n";
+	layoutBlock << LoadPrivateShaderLump("shaders/scene/layout_vert.glsl").GetChars() << "\n";
+
+	FString codeBlock;
+	codeBlock << LoadPrivateShaderLump(vert_lump).GetChars() << "\n";
+
+	return ShaderBuilder()
+		.Type(ShaderType::Vertex)
+		.DebugName(shadername.GetChars())
+		.AddSource("VersionBlock", GetVersionBlock().GetChars())
+		.AddSource("DefinesBlock", definesBlock.GetChars())
+		.AddSource("LayoutBlock", layoutBlock.GetChars())
+		.AddSource(vert_lump, codeBlock.GetChars())
+		.OnIncludeLocal([=](std::string headerName, std::string includerName, size_t depth) { return OnInclude(headerName.c_str(), includerName.c_str(), depth, false); })
+		.OnIncludeSystem([=](std::string headerName, std::string includerName, size_t depth) { return OnInclude(headerName.c_str(), includerName.c_str(), depth, true); })
+		.Create(shadername.GetChars(), fb->GetDevice());
+}
+
+std::unique_ptr<VulkanShader> VkShaderManager::LoadFragShader(FString shadername, const char *frag_lump, const char *material_lump, const char* mateffect_lump, const char *light_lump, const char *defines, const VkShaderKey& key)
+{
+	FString definesBlock;
+	if (fb->IsRayQueryEnabled()) definesBlock << "\n#define SUPPORTS_RAYQUERY\n";
+	definesBlock << defines;
+	definesBlock << "\n#define MAX_SURFACE_UNIFORMS " << std::to_string(MAX_SURFACE_UNIFORMS).c_str() << "\n";
+	definesBlock << "#define MAX_LIGHT_DATA " << std::to_string(MAX_LIGHT_DATA).c_str() << "\n";
+	definesBlock << "#define MAX_FOGBALL_DATA " << std::to_string(MAX_FOGBALL_DATA).c_str() << "\n";
+#ifdef NPOT_EMULATION
+	definesBlock << "#define NPOT_EMULATION\n";
+#endif
+	if (!fb->GetDevice()->EnabledFeatures.Features.shaderClipDistance) definesBlock << "#define NO_CLIPDISTANCE_SUPPORT\n";
+	if (!key.AlphaTest) definesBlock << "#define NO_ALPHATEST\n";
+	if (key.GBufferPass) definesBlock << "#define GBUFFER_PASS\n";
+
+	if (key.Simple2D) definesBlock << "#define SIMPLE2D\n";
+	if (key.ClampY) definesBlock << "#define TEXF_ClampY\n";
+	if (key.Brightmap) definesBlock << "#define TEXF_Brightmap\n";
+	if (key.Detailmap) definesBlock << "#define TEXF_Detailmap\n";
+	if (key.Glowmap) definesBlock << "#define TEXF_Glowmap\n";
+
+	if (key.UseRaytrace) definesBlock << "#define USE_RAYTRACE\n";
+	if (key.UseShadowmap) definesBlock << "#define USE_SHADOWMAP\n";
+	if (key.UseLevelMesh) definesBlock << "#define USE_LEVELMESH\n";
+
+	switch (key.TextureMode)
+	{
+	case TM_STENCIL: definesBlock << "#define TM_STENCIL\n"; break;
+	case TM_OPAQUE: definesBlock << "#define TM_OPAQUE\n"; break;
+	case TM_INVERSE: definesBlock << "#define TM_INVERSE\n"; break;
+	case TM_ALPHATEXTURE: definesBlock << "#define TM_ALPHATEXTURE\n"; break;
+	case TM_CLAMPY: definesBlock << "#define TM_CLAMPY\n"; break;
+	case TM_INVERTOPAQUE: definesBlock << "#define TM_INVERTOPAQUE\n"; break;
+	case TM_FOGLAYER: definesBlock << "#define TM_FOGLAYER\n"; break;
+	}
+
+	switch (key.LightMode)
+	{
+	case 0: definesBlock << "#define LIGHTMODE_DEFAULT\n"; break;
+	case 1: definesBlock << "#define LIGHTMODE_SOFTWARE\n"; break;
+	case 2: definesBlock << "#define LIGHTMODE_VANILLA\n"; break;
+	case 3: definesBlock << "#define LIGHTMODE_BUILD\n"; break;
+	}
+
+	if (key.FogBeforeLights) definesBlock << "#define FOG_BEFORE_LIGHTS\n";
+	if (key.FogAfterLights) definesBlock << "#define FOG_AFTER_LIGHTS\n";
+	if (key.FogRadial) definesBlock << "#define FOG_RADIAL\n";
+	if (key.SWLightRadial) definesBlock << "#define SWLIGHT_RADIAL\n";
+	if (key.SWLightBanded) definesBlock << "#define SWLIGHT_BANDED\n";
+	if (key.FogBalls) definesBlock << "#define FOGBALLS\n";
+
+	// Backwards compatibility with shaders that rape and pillage... uhm, I mean abused uFogEnabled to detect 2D rendering!
+	if (key.Simple2D) definesBlock << "#define uFogEnabled -3\n";
+	else definesBlock << "#define uFogEnabled 0\n";
+
+	FString layoutBlock;
+	layoutBlock << LoadPrivateShaderLump("shaders/scene/layout_shared.glsl").GetChars() << "\n";
+	layoutBlock << LoadPrivateShaderLump("shaders/scene/layout_frag.glsl").GetChars() << "\n";
+
+	FString codeBlock;
+	codeBlock << LoadPrivateShaderLump(frag_lump).GetChars() << "\n";
+
+	FString materialname = "MaterialBlock";
+	FString materialBlock;
+	FString lightname = "LightBlock";
+	FString lightBlock;
+	FString mateffectname = "MaterialEffectBlock";
+	FString mateffectBlock;
+
+	if (material_lump)
+	{
+		materialname = material_lump;
+		materialBlock = LoadPublicShaderLump(material_lump);
+
+		// Attempt to fix old custom shaders:
+
+		materialBlock = RemoveLegacyUserUniforms(materialBlock);
+		materialBlock.Substitute("gl_TexCoord[0]", "vTexCoord");
+
+		if (materialBlock.IndexOf("ProcessMaterial") < 0 && materialBlock.IndexOf("SetupMaterial") < 0)
+		{
+			// Old hardware shaders that implements GetTexCoord, ProcessTexel or Process
+
+			if (materialBlock.IndexOf("GetTexCoord") >= 0)
+			{
+				mateffectBlock = "vec2 GetTexCoord();";
+			}
+			
+			FString code;
+			if (materialBlock.IndexOf("ProcessTexel") >= 0)
+			{
+				code = LoadPrivateShaderLump("shaders/scene/material_legacy_ptexel.glsl");
+			}
+			else if (materialBlock.IndexOf("Process") >= 0)
+			{
+				code = LoadPrivateShaderLump("shaders/scene/material_legacy_process.glsl");
+			}
+			else
+			{
+				code = LoadPrivateShaderLump("shaders/scene/material_default.glsl");
+			}
+			code << "\n#line 1\n";
+
+			materialBlock = code + materialBlock;
+		}
+		else if (materialBlock.IndexOf("SetupMaterial") < 0)
+		{
+			// Old hardware shader implementing SetupMaterial
+
+			definesBlock << "#define LEGACY_USER_SHADER\n";
+
+			FString code = LoadPrivateShaderLump("shaders/scene/material_legacy_pmaterial.glsl");
+			code << "\n#line 1\n";
+
+			materialBlock = code + materialBlock;
+		}
+	}
+
+	if (light_lump && lightBlock.IsEmpty())
+	{
+		lightname = light_lump;
+		lightBlock << LoadPrivateShaderLump(light_lump).GetChars();
+	}
+
+	if (mateffect_lump && mateffectBlock.IsEmpty())
+	{
+		mateffectname = mateffect_lump;
+		mateffectBlock << LoadPrivateShaderLump(mateffect_lump).GetChars();
 	}
 
 	return ShaderBuilder()
 		.Type(ShaderType::Fragment)
-		.AddSource(shadername.GetChars(), code.GetChars())
 		.DebugName(shadername.GetChars())
-		.Create(shadername.GetChars(), fb->device.get());
+		.AddSource("VersionBlock", GetVersionBlock().GetChars())
+		.AddSource("DefinesBlock", definesBlock.GetChars())
+		.AddSource("LayoutBlock", layoutBlock.GetChars())
+		.AddSource("shaders/scene/includes.glsl", LoadPrivateShaderLump("shaders/scene/includes.glsl").GetChars())
+		.AddSource(mateffectname.GetChars(), mateffectBlock.GetChars())
+		.AddSource(materialname.GetChars(), materialBlock.GetChars())
+		.AddSource(lightname.GetChars(), lightBlock.GetChars())
+		.AddSource(frag_lump, codeBlock.GetChars())
+		.OnIncludeLocal([=](std::string headerName, std::string includerName, size_t depth) { return OnInclude(headerName.c_str(), includerName.c_str(), depth, false); })
+		.OnIncludeSystem([=](std::string headerName, std::string includerName, size_t depth) { return OnInclude(headerName.c_str(), includerName.c_str(), depth, true); })
+		.Create(shadername.GetChars(), fb->GetDevice());
 }
 
-FString VkShaderManager::GetTargetGlslVersion()
+FString VkShaderManager::GetVersionBlock()
 {
-	if (fb->device->Instance->ApiVersion == VK_API_VERSION_1_2)
+	FString versionBlock;
+
+	if (fb->GetDevice()->Instance->ApiVersion >= VK_API_VERSION_1_2)
 	{
-		return "#version 460\n#extension GL_EXT_ray_query : enable\n";
+		versionBlock << "#version 460 core\n";
 	}
 	else
 	{
-		return "#version 450 core\n";
+		versionBlock << "#version 450 core\n";
 	}
+
+	versionBlock << "#extension GL_GOOGLE_include_directive : enable\n";
+	versionBlock << "#extension GL_EXT_nonuniform_qualifier : enable\r\n";
+
+	if (fb->IsRayQueryEnabled())
+	{
+		versionBlock << "#extension GL_EXT_ray_query : enable\n";
+	}
+
+	return versionBlock;
+}
+
+ShaderIncludeResult VkShaderManager::OnInclude(FString headerName, FString includerName, size_t depth, bool system)
+{
+	if (depth > 8)
+		I_Error("Too much include recursion!");
+
+	FString includeguardname;
+	includeguardname << "_HEADERGUARD_" << headerName.GetChars();
+	includeguardname.ReplaceChars("/\\.", '_');
+
+	FString code;
+	code << "#ifndef " << includeguardname.GetChars() << "\n";
+	code << "#define " << includeguardname.GetChars() << "\n";
+	code << "#line 1\n";
+
+	if (system)
+		code << LoadPrivateShaderLump(headerName.GetChars()).GetChars() << "\n";
+	else
+		code << LoadPublicShaderLump(headerName.GetChars()).GetChars() << "\n";
+
+	code << "#endif\n";
+
+	return ShaderIncludeResult(headerName.GetChars(), code.GetChars());
 }
 
 FString VkShaderManager::LoadPublicShaderLump(const char *lumpname)

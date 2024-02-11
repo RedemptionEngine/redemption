@@ -5,6 +5,7 @@
 
 Scrollbar::Scrollbar(Widget* parent) : Widget(parent)
 {
+	SetStyleClass("scrollbar");
 	UpdatePartPositions();
 
 	mouse_down_timer = new Timer(this);
@@ -169,7 +170,7 @@ void Scrollbar::OnMouseMove(const Point& pos)
 	Update();
 }
 
-bool Scrollbar::OnMouseDown(const Point& pos, int key)
+bool Scrollbar::OnMouseDown(const Point& pos, InputKey key)
 {
 	mouse_drag_start_pos = pos;
 
@@ -257,7 +258,7 @@ bool Scrollbar::OnMouseDown(const Point& pos, int key)
 	return true;
 }
 
-bool Scrollbar::OnMouseUp(const Point& pos, int key)
+bool Scrollbar::OnMouseUp(const Point& pos, InputKey key)
 {
 	if (mouse_down_mode == mouse_down_thumb_drag)
 	{
@@ -294,8 +295,8 @@ void Scrollbar::OnPaint(Canvas* canvas)
 	part_button_increment.render_box(canvas, rect_button_increment);
 	*/
 
-	canvas->fillRect(Rect::shrink(Rect::xywh(0.0, 0.0, GetWidth(), GetHeight()), 4.0, 0.0, 4.0, 0.0), Colorf::fromRgba8(33, 33, 33));
-	canvas->fillRect(Rect::shrink(rect_thumb, 4.0, 0.0, 4.0, 0.0), Colorf::fromRgba8(58, 58, 58));
+	canvas->fillRect(Rect::shrink(Rect::xywh(0.0, 0.0, GetWidth(), GetHeight()), 4.0, 0.0, 4.0, 0.0), GetStyleColor("track-color"));
+	canvas->fillRect(Rect::shrink(rect_thumb, 4.0, 0.0, 4.0, 0.0), GetStyleColor("thumb-color"));
 }
 
 // Calculates positions of all parts. Returns true if thumb position was changed compared to previously, false otherwise.

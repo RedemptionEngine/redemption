@@ -5,9 +5,10 @@
 #include "hw_renderstate.h"
 #include "skyboxtexture.h"
 
+class DFrameBuffer;
 class FGameTexture;
 class FRenderState;
-class IVertexBuffer;
+class IBuffer;
 struct HWSkyPortal;
 struct HWDrawInfo;
 
@@ -16,7 +17,7 @@ const int skyoffsetfactor = 57;
 
 struct FSkyVertex
 {
-	float x, y, z, u, v, lu, lv, lindex;
+	float x, y, z, lindex, u, v, lu, lv;
 	PalEntry color;
 
 	void Set(float xx, float zz, float yy, float uu=0, float vv=0, PalEntry col=0xffffffff)
@@ -50,6 +51,7 @@ struct FSkyVertex
 class FSkyVertexBuffer
 {
 	friend struct HWSkyPortal;
+	DFrameBuffer* fb = nullptr;
 public:
 	static const int SKYHEMI_UPPER = 1;
 	static const int SKYHEMI_LOWER = 2;
@@ -61,7 +63,7 @@ public:
 		SKYMODE_FOGLAYER = 2
 	};
 
-	IVertexBuffer *mVertexBuffer;
+	IBuffer* mVertexBuffer;
 
 	TArray<FSkyVertex> mVertices;
 	TArray<unsigned int> mPrimStartDoom;
@@ -81,13 +83,9 @@ public:
 
 public:
 
-	FSkyVertexBuffer();
+	FSkyVertexBuffer(DFrameBuffer* fb);
 	~FSkyVertexBuffer();
-	void SetupMatrices(FGameTexture *tex, float x_offset, float y_offset, bool mirror, int mode, VSMatrix &modelmatrix, VSMatrix &textureMatrix, bool tiled, float xscale = 0, float vertscale = 0);
-	std::pair<IVertexBuffer *, IIndexBuffer *> GetBufferObjects() const
-	{
-		return std::make_pair(mVertexBuffer, nullptr);
-	}
+	void SetupMatrices(FRenderState& state, FGameTexture *tex, float x_offset, float y_offset, bool mirror, int mode, bool tiled, float xscale = 0, float vertscale = 0);
 
 	int FaceStart(int i)
 	{

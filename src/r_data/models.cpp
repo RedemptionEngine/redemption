@@ -43,6 +43,8 @@
 #include "i_time.h"
 #include "texturemanager.h"
 #include "modelrenderer.h"
+#include "i_interface.h"
+#include "p_tick.h"
 #include "actor.h"
 
 
@@ -52,6 +54,7 @@
 
 CVAR(Bool, gl_interpolate_model_frames, true, CVAR_ARCHIVE)
 EXTERN_CVAR (Bool, r_drawvoxels)
+float pauseTimeOffset = .0f;
 
 extern TDeletingArray<FVoxel *> Voxels;
 extern TDeletingArray<FVoxelDef *> VoxelDefs;
@@ -106,9 +109,23 @@ void RenderModel(FModelRenderer *renderer, float x, float y, float z, FSpriteMod
 
 	if (smf_flags & MDL_ROTATING)
 	{
+		bool isPaused = paused || P_CheckTickerPaused();
+		float timeFloat;
+		if (isPaused)
+		{
+			if (pauseTimeOffset == .0f)
+				pauseTimeOffset = (I_GetTime() + I_GetTimeFrac());
+			timeFloat = pauseTimeOffset;
+		}
+		else
+		{
+			pauseTimeOffset = .0f;
+			timeFloat = (I_GetTime() + I_GetTimeFrac());
+		}
+
 		if (smf->rotationSpeed > 0.0000000001 || smf->rotationSpeed < -0.0000000001)
 		{
-			double turns = (I_GetTime() + I_GetTimeFrac()) / (200.0 / smf->rotationSpeed);
+			double turns = timeFloat / (200.0 / smf->rotationSpeed);
 			turns -= floor(turns);
 			rotateOffset = turns * 360.0;
 		}
@@ -219,7 +236,7 @@ void RenderHUDModel(FModelRenderer *renderer, DPSprite *psp, FVector3 translatio
 	}
 
 	// Scaling model (y scale for a sprite means height, i.e. z in the world!).
-	objectToWorldMatrix.scale(smf->xscale, smf->zscale, smf->yscale / fovscale);
+	objectToWorldMatrix.scale((psp->Flags & PSPF_FLIP) ? -smf->xscale : smf->xscale, smf->zscale, smf->yscale / fovscale);
 
 	// Aplying model offsets (model offsets do not depend on model scalings).
 	objectToWorldMatrix.translate(smf->xoffset / smf->xscale, smf->zoffset / smf->zscale, smf->yoffset / smf->yscale);

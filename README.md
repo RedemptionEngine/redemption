@@ -4,13 +4,7 @@
 
 ## Redemption is a modder-friendly fork of GZDoom that seeks to take its own route, setting certain defaults to what is more modern or standard, and even implementing features that previously have been non-negotiable. The end goal of all this is to make an engine that focuses on the User Experience, to try and take what is essentially a 1990's program and make it work for today's audience.
 
-Copyright (c) 1998-2023 ZDoom + GZDoom + Zandronum + Redemption teams, and contributors
-
-Doom Source (c) 1997 id Software, Raven Software, and contributors
-
-Please see license files for individual contributor licenses
-
-Special thanks to Coraline of the EDGE team for allowing us to use her [README.md](https://github.com/3dfxdev/EDGE/blob/master/README.md) as a template for this one.
+Copyright (c) 1998-2023 ZDoom + GZDoom + Zandronum + VKDoom + Redemption teams, and contributors
 
 ### Licensed under the GPL v3
 ##### https://www.gnu.org/licenses/quick-guide-gplv3.en.html

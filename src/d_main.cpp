@@ -323,8 +323,8 @@ CUSTOM_CVAR (String, vid_cursor, "None", CVAR_ARCHIVE | CVAR_NOINITCALL)
 
 // Controlled by startup dialog
 CVAR(Bool, disableautoload, false, CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
-CVAR(Bool, autoloadbrightmaps, false, CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
-CVAR(Bool, autoloadlights, false, CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
+CVAR(Bool, autoloadbrightmaps, true, CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
+CVAR(Bool, autoloadlights, true, CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
 CVAR(Bool, autoloadwidescreen, true, CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
 CVAR(Bool, r_debug_disable_vis_filter, false, 0)
 CVAR(Int, vid_showpalette, 0, 0)
@@ -428,9 +428,9 @@ void D_Render(std::function<void()> action, bool interpolate)
 	for (auto Level : AllLevels())
 	{
 		// Check for the presence of dynamic lights at the start of the frame once.
-		if ((gl_lights && vid_rendermode == 4) || (r_dynlights && vid_rendermode != 4) || Level->LightProbes.Size() > 0)
+		if ((gl_lights && vid_rendermode == 4) || (r_dynlights && vid_rendermode != 4) || Level->lightmaps)
 		{
-			Level->HasDynamicLights = Level->lights || Level->LightProbes.Size() > 0;
+			Level->HasDynamicLights = Level->lights || Level->lightmaps;
 		}
 		else Level->HasDynamicLights = false;	// lights are off so effectively we have none.
 		if (interpolate) Level->interpolator.DoInterpolations(I_GetTimeFrac());
@@ -815,33 +815,45 @@ static void DrawPaletteTester(int paletteno)
 // Draws the fps counter, dot ticker, and palette debug.
 //
 //==========================================================================
-uint64_t LastFPS, LastMSCount;
+uint64_t LastFPS, LastAvgNSCount, LastMaxNSCount, LastMinNSCount;
 
 void CalcFps()
 {
-	static uint64_t LastMS = 0, LastSec = 0, FrameCount = 0, LastTic = 0;
+	static uint64_t LastNS = 0, LastStart = 0, FrameCount = 0, AccumNS = 0, MaxNS = 0, MinNS = 0xffff'ffff'ffffULL;
 
-	uint64_t ms = screen->FrameTime;
-	uint64_t howlong = ms - LastMS;
+	uint64_t ns = screen->FrameTimeNS;
+	uint64_t howlong = ns - LastNS;
 	if ((signed)howlong > 0) // do this only once per frame.
 	{
-		uint32_t thisSec = (uint32_t)(ms / 1000);
-		if (LastSec < thisSec)
-		{
-			LastFPS = FrameCount / (thisSec - LastSec);
-			LastSec = thisSec;
-			FrameCount = 0;
-		}
 		FrameCount++;
-		LastMS = ms;
-		LastMSCount = howlong;
+
+		// Wait until at least a second has elapsed
+		if (LastStart / 1'000'000'000ULL < ns / 1'000'000'000ULL)
+		{
+			LastFPS = (FrameCount * 1'000'000'000ULL + 100'000'000ULL) / (ns - LastStart);
+			LastStart = ns;
+			LastAvgNSCount = AccumNS / FrameCount;
+			LastMaxNSCount = MaxNS;
+			LastMinNSCount = MinNS;
+			FrameCount = 0;
+			AccumNS = 0;
+			MaxNS = 0;
+			MinNS = 0xffff'ffff'ffffULL;
+		}
+		LastNS = ns;
+		AccumNS += howlong;
+		MaxNS = std::max(MaxNS, howlong);
+		MinNS = std::min(MinNS, howlong);
 	}
 }
 
 ADD_STAT(fps)
 {
 	CalcFps();
-	return FStringf("%2llu ms (%3llu fps)", (unsigned long long)LastMSCount , (unsigned long long)LastFPS);
+	return FStringf("%2llu.%llu ms avg (%4llu fps), %2llu.%llu ms max, %2llu.%llu ms min",
+		(unsigned long long)(LastAvgNSCount / 1'000'000ULL), (unsigned long long)(LastAvgNSCount / 100'000ULL % 10), (unsigned long long)LastFPS,
+		(unsigned long long)(LastMaxNSCount / 1'000'000ULL), (unsigned long long)(LastMaxNSCount / 100'000ULL % 10),
+		(unsigned long long)(LastMinNSCount / 1'000'000ULL), (unsigned long long)(LastMinNSCount / 100'000ULL % 10));
 }
 
 static void DrawRateStuff()
@@ -857,7 +869,7 @@ static void DrawRateStuff()
 		int rate_x;
 		int textScale = active_con_scale(twod);
 
-		chars = mysnprintf(fpsbuff, countof(fpsbuff), "%2llu ms (%3llu fps)", (unsigned long long)LastMSCount, (unsigned long long)LastFPS);
+		chars = mysnprintf(fpsbuff, countof(fpsbuff), "%2llu.%llu ms (%4llu fps)", (unsigned long long)(LastAvgNSCount / 1'000'000ULL), (unsigned long long)(LastAvgNSCount / 100'000ULL % 10), (unsigned long long)LastFPS);
 		rate_x = screen->GetWidth() / textScale - NewConsoleFont->StringWidth(&fpsbuff[0]);
 		ClearRect(twod, rate_x * textScale, 0, screen->GetWidth(), NewConsoleFont->GetHeight() * textScale, GPalette.BlackIndex, 0);
 		DrawText(twod, NewConsoleFont, CR_WHITE, rate_x, 0, (char*)&fpsbuff[0],
@@ -1019,8 +1031,10 @@ void D_Display ()
 	}
 	
 	screen->FrameTime = I_msTimeFS();
+	screen->FrameTimeNS = I_nsTime();
 	TexAnim.UpdateAnimations(screen->FrameTime);
 	R_UpdateSky(screen->FrameTime);
+	if (level.levelMesh) level.levelMesh->BeginFrame(level);
 	screen->BeginFrame();
 	twod->ClearClipRect();
 	if ((gamestate == GS_LEVEL || gamestate == GS_TITLELEVEL) && gametic != 0)
@@ -3141,7 +3155,6 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		V_InitScreenSize();
 		// This allocates a dummy framebuffer as a stand-in until V_Init2 is called.
 		V_InitScreen();
-		V_Init2();
 	}
 	SavegameFolder = iwad_info->Autoname;
 	gameinfo.gametype = iwad_info->gametype;
@@ -3242,6 +3255,12 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	allwads.clear();
 	allwads.shrink_to_fit();
 	SetMapxxFlag();
+
+	if (!restart)
+	{
+		// Note: this has to happen after the file system has been initialized (backends may load shaders during initialization)
+		V_Init2();
+	}
 
 	D_GrabCVarDefaults(); //parse DEFCVARS
 	InitPalette();
@@ -3558,7 +3577,6 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		twod->Begin(screen->GetWidth(), screen->GetHeight());
 		twod->End();
 		UpdateJoystickMenu(NULL);
-		UpdateVRModes();
 		Local_Job_Init();
 
 		v = Args->CheckValue ("-loadgame");
@@ -4064,6 +4082,7 @@ CCMD(type)
 		auto data = fileSystem.ReadFile(lump);
 		Printf("%.*s\n", data.size(), data.string());
 	}
+}
 }
 
 extern int playerfornode[MAXNETNODES];

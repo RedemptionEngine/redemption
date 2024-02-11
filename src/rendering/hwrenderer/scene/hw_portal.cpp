@@ -36,12 +36,13 @@
 #include "flatvertices.h"
 #include "hw_clock.h"
 #include "hw_lighting.h"
+#include "hw_drawcontext.h"
 #include "texturemanager.h"
 
 EXTERN_CVAR(Int, r_mirror_recursions)
 EXTERN_CVAR(Bool, gl_portals)
 
-void SetPlaneTextureRotation(FRenderState& state, HWSectorPlane* plane, FGameTexture* texture);
+bool SetPlaneTextureRotation(FRenderState& state, HWSectorPlane* plane, FGameTexture* texture);
 
 //-----------------------------------------------------------------------------
 //
@@ -73,7 +74,6 @@ CCMD(gl_portalinfo)
 }
 
 static FString indent;
-FPortalSceneState portalState;
 
 //-----------------------------------------------------------------------------
 //
@@ -191,10 +191,9 @@ void HWPortal::DrawPortalStencil(FRenderState &state, int pass)
 
 		if (NeedCap() && lines.Size() > 1 && planesused != 0)
 		{
-			screen->mVertexData->Map();
 			if (planesused & (1 << sector_t::floor))
 			{
-				auto verts = screen->mVertexData->AllocVertices(4);
+				auto verts = state.AllocVertices(4);
 				auto ptr = verts.first;
 				ptr[0].Set((float)boundingBox.left, -32767.f, (float)boundingBox.top, 0, 0);
 				ptr[1].Set((float)boundingBox.right, -32767.f, (float)boundingBox.top, 0, 0);
@@ -204,7 +203,7 @@ void HWPortal::DrawPortalStencil(FRenderState &state, int pass)
 			}
 			if (planesused & (1 << sector_t::ceiling))
 			{
-				auto verts = screen->mVertexData->AllocVertices(4);
+				auto verts = state.AllocVertices(4);
 				auto ptr = verts.first;
 				ptr[0].Set((float)boundingBox.left, 32767.f, (float)boundingBox.top, 0, 0);
 				ptr[1].Set((float)boundingBox.right, 32767.f, (float)boundingBox.top, 0, 0);
@@ -212,7 +211,6 @@ void HWPortal::DrawPortalStencil(FRenderState &state, int pass)
 				ptr[3].Set((float)boundingBox.right, 32767.f, (float)boundingBox.bottom, 0, 0);
 				mTopCap = verts.second;
 			}
-			screen->mVertexData->Unmap();
 		}
 
 	}
@@ -641,9 +639,9 @@ bool HWLineToLinePortal::Setup(HWDrawInfo *di, FRenderState &rstate, Clipper *cl
 	return true;
 }
 
-void HWLineToLinePortal::RenderAttached(HWDrawInfo *di)
+void HWLineToLinePortal::RenderAttached(HWDrawInfo *di, FRenderState& state)
 {
-	di->ProcessActorsInPortal(glport, di->in_area);
+	di->ProcessActorsInPortal(glport, di->in_area, state);
 }
 
 const char *HWLineToLinePortal::GetName() { return "LineToLine"; }
@@ -884,7 +882,7 @@ const char *HWPlaneMirrorPortal::GetName() { return origin->fC() < 0? "Planemirr
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-HWHorizonPortal::HWHorizonPortal(FPortalSceneState *s, HWHorizonInfo * pt, FRenderViewpoint &vp, bool local)
+HWHorizonPortal::HWHorizonPortal(FPortalSceneState *s, FRenderState& renderstate, HWHorizonInfo * pt, FRenderViewpoint &vp, bool local)
 : HWPortal(s, local)
 {
 	origin = pt;
@@ -899,7 +897,7 @@ HWHorizonPortal::HWHorizonPortal(FPortalSceneState *s, HWHorizonInfo * pt, FRend
 
 	// Draw to some far away boundary
 	// This is not drawn as larger strips because it causes visual glitches.
-	auto verts = screen->mVertexData->AllocVertices(1024 + 10);
+	auto verts = renderstate.AllocVertices(1024 + 10);
 	auto ptr = verts.first;
 	for (int xx = -32768; xx < 32768; xx += 4096)
 	{
@@ -973,23 +971,23 @@ void HWHorizonPortal::DrawContents(HWDrawInfo *di, FRenderState &state)
 	{
 		// glowing textures are always drawn full bright without color
 		SetColor(state, di->Level, di->lightmode, 255, 0, false, origin->colormap, 1.f);
-		SetFog(state, di->Level, di->lightmode, 255, 0, false, &origin->colormap, false);
+		SetFog(state, di->Level, di->lightmode, 255, 0, false, &origin->colormap, false, di->drawctx->portalState.inskybox);
 	}
 	else
 	{
 		int rel = getExtraLight();
 		SetColor(state, di->Level, di->lightmode, origin->lightlevel, rel, di->isFullbrightScene(), origin->colormap, 1.0f);
-		SetFog(state, di->Level, di->lightmode, origin->lightlevel, rel, di->isFullbrightScene(), &origin->colormap, false);
+		SetFog(state, di->Level, di->lightmode, origin->lightlevel, rel, di->isFullbrightScene(), &origin->colormap, false, di->drawctx->portalState.inskybox);
 	}
 
 
 	state.EnableBrightmap(true);
 	state.SetMaterial(texture, UF_Texture, 0, CLAMP_NONE, NO_TRANSLATION, -1);
 	state.SetObjectColor(origin->specialcolor);
-
-	SetPlaneTextureRotation(state, sp, texture);
 	state.AlphaFunc(Alpha_GEqual, 0.f);
 	state.SetRenderStyle(STYLE_Source);
+
+	bool texmatrix = SetPlaneTextureRotation(state, sp, texture);
 
 	for (unsigned i = 0; i < vcount; i += 4)
 	{
@@ -997,7 +995,8 @@ void HWHorizonPortal::DrawContents(HWDrawInfo *di, FRenderState &state)
 	}
 	state.Draw(DT_TriangleStrip, voffset + vcount, 10, false);
 
-	state.EnableTextureMatrix(false);
+	if (texmatrix)
+		state.SetTextureMatrix(VSMatrix::identity());
 }
 
 
@@ -1044,7 +1043,7 @@ void HWEEHorizonPortal::DrawContents(HWDrawInfo *di, FRenderState &state)
 		{
 			horz.plane.Texheight = vp.Pos.Z + fabs(horz.plane.Texheight);
 		}
-		HWHorizonPortal ceil(mState, &horz, di->Viewpoint, true);
+		HWHorizonPortal ceil(mState, state, &horz, di->Viewpoint, true);
 		ceil.DrawContents(di, state);
 	}
 	if (sector->GetTexture(sector_t::floor) != skyflatnum)
@@ -1058,7 +1057,7 @@ void HWEEHorizonPortal::DrawContents(HWDrawInfo *di, FRenderState &state)
 		{
 			horz.plane.Texheight = vp.Pos.Z - fabs(horz.plane.Texheight);
 		}
-		HWHorizonPortal floor(mState, &horz, di->Viewpoint, true);
+		HWHorizonPortal floor(mState, state, &horz, di->Viewpoint, true);
 		floor.DrawContents(di, state);
 	}
 }

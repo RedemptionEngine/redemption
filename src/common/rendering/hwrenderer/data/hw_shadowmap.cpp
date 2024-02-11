@@ -24,8 +24,8 @@
 #include "hw_cvars.h"
 #include "hw_dynlightdata.h"
 #include "buffers.h"
-#include "shaderuniforms.h"
 #include "hwrenderer/postprocessing/hw_postprocess.h"
+#include "v_video.h"
 
 /*
 	The 1D shadow maps are stored in a 1024x1024 texture as float depth values (R32F).
@@ -55,43 +55,26 @@
 	as on the CPU, except everything uses indexes as pointers are not allowed in GLSL.
 */
 
-cycle_t IShadowMap::UpdateCycles;
-int IShadowMap::LightsProcessed;
-int IShadowMap::LightsShadowmapped;
-
-CVAR(Bool, gl_light_shadowmap, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+cycle_t ShadowMap::UpdateCycles;
+int ShadowMap::LightsProcessed;
+int ShadowMap::LightsShadowmapped;
 
 ADD_STAT(shadowmap)
 {
 	FString out;
-	out.Format("upload=%04.2f ms  lights=%d  shadowmapped=%d", IShadowMap::UpdateCycles.TimeMS(), IShadowMap::LightsProcessed, IShadowMap::LightsShadowmapped);
+	out.Format("upload=%04.2f ms  lights=%d  shadowmapped=%d", ShadowMap::UpdateCycles.TimeMS(), ShadowMap::LightsProcessed, ShadowMap::LightsShadowmapped);
 	return out;
 }
 
-CUSTOM_CVAR(Int, gl_shadowmap_quality, 512, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+bool ShadowMap::ShadowTest(const DVector3 &lpos, const DVector3 &pos)
 {
-	switch (self)
-	{
-	case 128:
-	case 256:
-	case 512:
-	case 1024:
-		break;
-	default:
-		self = 128;
-		break;
-	}
-}
-
-bool IShadowMap::ShadowTest(const DVector3 &lpos, const DVector3 &pos)
-{
-	if (mAABBTree && gl_light_shadowmap)
+	if (mAABBTree && gl_light_shadows > 0)
 		return mAABBTree->RayTest(lpos, pos) >= 1.0f;
 	else
 		return true;
 }
 
-bool IShadowMap::PerformUpdate()
+void ShadowMap::PerformUpdate()
 {
 	UpdateCycles.Reset();
 
@@ -102,55 +85,18 @@ bool IShadowMap::PerformUpdate()
 	if (CollectLights != nullptr)
 	{
 		UpdateCycles.Clock();
-		UploadAABBTree();
-		UploadLights();
-		return true;
-	}
-	return false;
-}
 
-void IShadowMap::UploadLights()
-{
-	mLights.Resize(1024 * 4);
-	CollectLights();
+		mLights.Resize(1024 * 4);
+		CollectLights();
 
-	if (mLightList == nullptr)
-		mLightList = screen->CreateDataBuffer(LIGHTLIST_BINDINGPOINT, true, false);
-
-	mLightList->SetData(sizeof(float) * mLights.Size(), &mLights[0], BufferUsageType::Stream);
-}
-
-
-void IShadowMap::UploadAABBTree()
-{
-	if (mNewTree)
-	{
+		fb->SetShadowMaps(mLights, mAABBTree, mNewTree);
 		mNewTree = false;
 
-		if (!mNodesBuffer)
-			mNodesBuffer = screen->CreateDataBuffer(LIGHTNODES_BINDINGPOINT, true, false);
-		mNodesBuffer->SetData(mAABBTree->NodesSize(), mAABBTree->Nodes(), BufferUsageType::Static);
-
-		if (!mLinesBuffer)
-			mLinesBuffer = screen->CreateDataBuffer(LIGHTLINES_BINDINGPOINT, true, false);
-		mLinesBuffer->SetData(mAABBTree->LinesSize(), mAABBTree->Lines(), BufferUsageType::Static);
-	}
-	else if (mAABBTree->Update())
-	{
-		mNodesBuffer->SetSubData(mAABBTree->DynamicNodesOffset(), mAABBTree->DynamicNodesSize(), mAABBTree->DynamicNodes());
-		mLinesBuffer->SetSubData(mAABBTree->DynamicLinesOffset(), mAABBTree->DynamicLinesSize(), mAABBTree->DynamicLines());
+		UpdateCycles.Unclock();
 	}
 }
 
-void IShadowMap::Reset()
+ShadowMap::~ShadowMap()
 {
-	delete mLightList; mLightList = nullptr;
-	delete mNodesBuffer; mNodesBuffer = nullptr;
-	delete mLinesBuffer; mLinesBuffer = nullptr;
-}
-
-IShadowMap::~IShadowMap()
-{
-	Reset();
 }
 

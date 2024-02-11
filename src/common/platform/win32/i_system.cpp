@@ -113,7 +113,6 @@ static HCURSOR CreateBitmapCursor(int xhot, int yhot, HBITMAP and_mask, HBITMAP 
 
 EXTERN_CVAR (Bool, queryiwad);
 // Used on welcome/IWAD screen.
-EXTERN_CVAR (Int, vid_preferbackend)
 
 extern HANDLE StdOut;
 extern bool FancyStdOut;

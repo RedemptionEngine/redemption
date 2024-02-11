@@ -41,10 +41,11 @@
 #include "hwrenderer/scene/hw_drawinfo.h"
 #include "hw_renderstate.h"
 #include "hwrenderer/scene/hw_portal.h"
-#include "hw_bonebuffer.h"
 #include "hw_models.h"
+#include "hwrenderer/scene/hw_drawcontext.h"
 
 CVAR(Bool, gl_light_models, true, CVAR_ARCHIVE)
+EXTERN_CVAR(Bool, gl_texture);
 
 VSMatrix FHWModelRenderer::GetViewToWorldMatrix()
 {
@@ -57,23 +58,31 @@ void FHWModelRenderer::BeginDrawModel(FRenderStyle style, int smf_flags, const V
 {
 	state.SetDepthFunc(DF_LEqual);
 	state.EnableTexture(true);
+
+	if (!gl_texture)
+	{
+		state.SetTextureMode(TM_STENCIL);
+		state.SetRenderStyle(STYLE_Stencil);
+	}
+
 	// [BB] In case the model should be rendered translucent, do back face culling.
 	// This solves a few of the problems caused by the lack of depth sorting.
 	// [Nash] Don't do back face culling if explicitly specified in MODELDEF
 	// TO-DO: Implement proper depth sorting.
 	if ((smf_flags & MDL_FORCECULLBACKFACES) || (!(style == DefaultRenderStyle()) && !(smf_flags & MDL_DONTCULLBACKFACES)))
 	{
-		state.SetCulling((mirrored ^ portalState.isMirrored()) ? Cull_CCW : Cull_CW);
+		state.SetCulling((mirrored ^ di->drawctx->portalState.isMirrored()) ? Cull_CCW : Cull_CW);
 	}
 
-	state.mModelMatrix = objectToWorldMatrix;
-	state.EnableModelMatrix(true);
+	VSMatrix normalModelMatrix;
+	normalModelMatrix.computeNormalMatrix(objectToWorldMatrix);
+	state.SetModelMatrix(objectToWorldMatrix, normalModelMatrix);
 }
 
 void FHWModelRenderer::EndDrawModel(FRenderStyle style, int smf_flags)
 {
 	state.SetBoneIndexBase(-1);
-	state.EnableModelMatrix(false);
+	state.SetModelMatrix(VSMatrix::identity(), VSMatrix::identity());
 	state.SetDepthFunc(DF_Less);
 	if ((smf_flags & MDL_FORCECULLBACKFACES) || (!(style == DefaultRenderStyle()) && !(smf_flags & MDL_DONTCULLBACKFACES)))
 		state.SetCulling(Cull_None);
@@ -84,22 +93,31 @@ void FHWModelRenderer::BeginDrawHUDModel(FRenderStyle style, const VSMatrix &obj
 	state.SetDepthFunc(DF_LEqual);
 	state.SetDepthClamp(true);
 
+	state.EnableTexture(true);
+
+	if (!gl_texture)
+	{
+		state.SetTextureMode(TM_STENCIL);
+		state.SetRenderStyle(STYLE_Stencil);
+	}
+
 	// [BB] In case the model should be rendered translucent, do back face culling.
 	// This solves a few of the problems caused by the lack of depth sorting.
 	// TO-DO: Implement proper depth sorting.
 	if (!(style == DefaultRenderStyle()) || (smf_flags & MDL_FORCECULLBACKFACES))
 	{
-		state.SetCulling((mirrored ^ portalState.isMirrored()) ? Cull_CW : Cull_CCW);
+		state.SetCulling((mirrored ^ di->drawctx->portalState.isMirrored()) ? Cull_CW : Cull_CCW);
 	}
 
-	state.mModelMatrix = objectToWorldMatrix;
-	state.EnableModelMatrix(true);
+	VSMatrix normalModelMatrix;
+	normalModelMatrix.computeNormalMatrix(objectToWorldMatrix);
+	state.SetModelMatrix(objectToWorldMatrix, normalModelMatrix);
 }
 
 void FHWModelRenderer::EndDrawHUDModel(FRenderStyle style, int smf_flags)
 {
 	state.SetBoneIndexBase(-1);
-	state.EnableModelMatrix(false);
+	state.SetModelMatrix(VSMatrix::identity(), VSMatrix::identity());
 
 	state.SetDepthFunc(DF_Less);
 	if (!(style == DefaultRenderStyle()) || (smf_flags & MDL_FORCECULLBACKFACES))
@@ -141,9 +159,7 @@ void FHWModelRenderer::DrawElements(int numIndices, size_t offset)
 int FHWModelRenderer::SetupFrame(FModel *model, unsigned int frame1, unsigned int frame2, unsigned int size, const TArray<VSMatrix>& bones, int boneStartIndex)
 {
 	auto mdbuff = static_cast<FModelVertexBuffer*>(model->GetVertexBuffer(GetType()));
-	screen->mBones->Map();
-	boneIndexBase = boneStartIndex >= 0 ? boneStartIndex : screen->mBones->UploadBones(bones);
-	screen->mBones->Unmap();
+	boneIndexBase = boneStartIndex >= 0 ? boneStartIndex : state.UploadBones(bones);
 	state.SetBoneIndexBase(boneIndexBase);
 	if (mdbuff)
 	{

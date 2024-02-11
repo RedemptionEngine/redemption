@@ -3,9 +3,9 @@
 
 #include "zvulkan/vulkanobjects.h"
 #include "zvulkan/vulkanbuilders.h"
-#include "vulkan/system/vk_renderdevice.h"
-#include "vulkan/system/vk_commandbuffer.h"
-#include "vulkan/renderer/vk_renderpass.h"
+#include "vulkan/vk_renderdevice.h"
+#include "vulkan/commands/vk_commandbuffer.h"
+#include "vulkan/pipelines/vk_renderpass.h"
 
 class VkTextureImage
 {
@@ -19,6 +19,12 @@ public:
 		for (auto &it : RSFramebuffers)
 			deletelist->Add(std::move(it.second));
 		RSFramebuffers.clear();
+		for (auto& framebuffer : LMFramebuffers)
+			deletelist->Add(std::move(framebuffer));
+		LMFramebuffers.clear();
+		for (auto& view : LMViews)
+			deletelist->Add(std::move(view));
+		LMViews.clear();
 		deletelist->Add(std::move(DepthOnlyView));
 		deletelist->Add(std::move(View));
 		deletelist->Add(std::move(Image));
@@ -33,12 +39,14 @@ public:
 	VkImageAspectFlags AspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	std::unique_ptr<VulkanFramebuffer> PPFramebuffer;
 	std::map<VkRenderPassKey, std::unique_ptr<VulkanFramebuffer>> RSFramebuffers;
+	std::vector<std::unique_ptr<VulkanImageView>> LMViews;
+	std::vector<std::unique_ptr<VulkanFramebuffer>> LMFramebuffers;
 };
 
 class VkImageTransition
 {
 public:
-	VkImageTransition& AddImage(VkTextureImage *image, VkImageLayout targetLayout, bool undefinedSrcLayout, int baseMipLevel = 0, int levelCount = 1);
+	VkImageTransition& AddImage(VkTextureImage *image, VkImageLayout targetLayout, bool undefinedSrcLayout, int baseMipLevel = 0, int levelCount = 1, int baseArrayLayer = 0, int layerCount = 1);
 	void Execute(VulkanCommandBuffer *cmdbuffer);
 
 private:

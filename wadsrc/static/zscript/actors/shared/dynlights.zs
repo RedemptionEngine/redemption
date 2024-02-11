@@ -17,6 +17,7 @@ class DynamicLight : Actor
 	flagdef spot: lightflags, 6;
 	flagdef dontlightothers: lightflags, 7;
 	flagdef dontlightmap: lightflags, 8;
+	flagdef trace: lightflags, 9;
 
 	enum EArgs
 	{
@@ -40,6 +41,7 @@ class DynamicLight : Actor
 		LF_SPOT = 64,
 		LF_DONTLIGHTOTHERS = 128,
 		LF_DONTLIGHTMAP = 256,
+		LF_TRACE = 512
 	};
 
 	enum ELightType
@@ -480,4 +482,58 @@ class VavoomLightColor : VavoomLight
 	}
 }
 
+//==========================================================================
+//
+// ZDRay Lights
+//
+//==========================================================================
 
+// to reduce copy/pasting
+mixin class TraceLightDefaults
+{
+	Default
+	{
+		+DYNAMICLIGHT.TRACE
+		+DYNAMICLIGHT.DONTLIGHTMAP
+	}
+}
+
+class PointLightTraceAttenuated : PointLightAttenuated
+{
+	mixin TraceLightDefaults;
+}
+
+class PointLightPulseTraceAttenuated : PointLightPulseAttenuated
+{
+	mixin TraceLightDefaults;
+}
+
+class PointLightFlickerTraceAttenuated : PointLightFlickerAttenuated
+{
+	mixin TraceLightDefaults;
+}
+
+class PointLightFlickerRandomTraceAttenuated : PointLightFlickerRandomAttenuated
+{
+	mixin TraceLightDefaults;
+}
+
+class SpotLightTraceAttenuated : SpotLightAttenuated
+{
+	mixin TraceLightDefaults;
+}
+
+class SpotLightPulseTraceAttenuated : SpotLightPulseAttenuated
+{
+	mixin TraceLightDefaults;
+}
+
+class SpotLightFlickerTraceAttenuated : SpotLightFlickerAttenuated
+{
+	mixin TraceLightDefaults;
+}
+
+class SpotLightFlickerRandomTraceAttenuated : SpotLightFlickerRandomAttenuated
+{
+	mixin TraceLightDefaults;
+}

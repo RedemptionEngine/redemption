@@ -47,7 +47,7 @@ static F2DDrawer drawer = F2DDrawer();
 F2DDrawer* twod = &drawer;
 
 EXTERN_CVAR(Float, transsouls)
-CVAR(Float, classic_scaling_factor, 1.0, CVAR_ARCHIVE)
+CVAR(Float, classic_scaling_factor, 2.0, CVAR_ARCHIVE)
 CVAR(Float, classic_scaling_pixelaspect, 1.2f, CVAR_ARCHIVE)
 
 IMPLEMENT_CLASS(FCanvas, false, false)
@@ -1216,15 +1216,14 @@ void F2DDrawer::OnFrameDone()
 
 F2DVertexBuffer::F2DVertexBuffer()
 {
-	mVertexBuffer = screen->CreateVertexBuffer();
-	mIndexBuffer = screen->CreateIndexBuffer();
-
 	static const FVertexBufferAttribute format[] = {
-		{ 0, VATTR_VERTEX, VFmt_Float3, (int)myoffsetof(F2DDrawer::TwoDVertex, x) },
+		{ 0, VATTR_VERTEX, VFmt_Float4, (int)myoffsetof(F2DDrawer::TwoDVertex, x) },
 		{ 0, VATTR_TEXCOORD, VFmt_Float2, (int)myoffsetof(F2DDrawer::TwoDVertex, u) },
 		{ 0, VATTR_COLOR, VFmt_Byte4, (int)myoffsetof(F2DDrawer::TwoDVertex, color0) }
 	};
-	mVertexBuffer->SetFormat(1, 3, sizeof(F2DDrawer::TwoDVertex), format);
+
+	mVertexBuffer = screen->CreateVertexBuffer(1, 3, sizeof(F2DDrawer::TwoDVertex), format);
+	mIndexBuffer = screen->CreateIndexBuffer();
 }
 
 //==========================================================================

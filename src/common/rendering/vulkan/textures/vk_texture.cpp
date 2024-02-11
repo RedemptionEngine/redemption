@@ -24,7 +24,7 @@
 #include "vk_hwtexture.h"
 #include "vk_pptexture.h"
 #include "vk_renderbuffers.h"
-#include "vulkan/renderer/vk_postprocess.h"
+#include "vulkan/vk_postprocess.h"
 #include "hw_cvars.h"
 
 VkTextureManager::VkTextureManager(VulkanRenderDevice* fb) : fb(fb)
@@ -148,12 +148,12 @@ void VkTextureManager::CreateNullTexture()
 		.Size(1, 1)
 		.Usage(VK_IMAGE_USAGE_SAMPLED_BIT)
 		.DebugName("VkDescriptorSetManager.NullTexture")
-		.Create(fb->device.get());
+		.Create(fb->GetDevice());
 
 	NullTextureView = ImageViewBuilder()
 		.Image(NullTexture.get(), VK_FORMAT_R8G8B8A8_UNORM)
 		.DebugName("VkDescriptorSetManager.NullTextureView")
-		.Create(fb->device.get());
+		.Create(fb->GetDevice());
 
 	PipelineBarrier()
 		.AddImage(NullTexture.get(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT)
@@ -167,12 +167,12 @@ void VkTextureManager::CreateShadowmap()
 		.Format(VK_FORMAT_R32_SFLOAT)
 		.Usage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
 		.DebugName("VkRenderBuffers.Shadowmap")
-		.Create(fb->device.get());
+		.Create(fb->GetDevice());
 
 	Shadowmap.View = ImageViewBuilder()
 		.Image(Shadowmap.Image.get(), VK_FORMAT_R32_SFLOAT)
 		.DebugName("VkRenderBuffers.ShadowmapView")
-		.Create(fb->device.get());
+		.Create(fb->GetDevice());
 
 	VkImageTransition()
 		.AddImage(&Shadowmap, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true)
@@ -185,69 +185,81 @@ void VkTextureManager::CreateLightmap()
 	data.Push(0);
 	data.Push(0);
 	data.Push(0);
-	data.Push(0x3c00); // half-float 1.0
-	SetLightmap(1, 1, data);
+	CreateLightmap(1, 1, std::move(data));
 }
 
-void VkTextureManager::SetLightmap(int LMTextureSize, int LMTextureCount, const TArray<uint16_t>& LMTextureData)
+void VkTextureManager::CreateLightmap(int newLMTextureSize, int newLMTextureCount, TArray<uint16_t>&& newPixelData)
 {
-	int w = LMTextureSize;
-	int h = LMTextureSize;
-	int count = LMTextureCount;
+	if (LMTextureSize == newLMTextureSize && LMTextureCount == newLMTextureCount + 1 && newPixelData.Size() == 0)
+		return;
+
+	LMTextureSize = newLMTextureSize;
+	LMTextureCount = newLMTextureCount + 1; // the extra texture is for the dynamic lightmap
+	
+	int w = newLMTextureSize;
+	int h = newLMTextureSize;
+	int count = newLMTextureCount;
 	int pixelsize = 8;
 
 	Lightmap.Reset(fb);
 
 	Lightmap.Image = ImageBuilder()
-		.Size(w, h, 1, count)
+		.Size(w, h, 1, LMTextureCount)
 		.Format(VK_FORMAT_R16G16B16A16_SFLOAT)
-		.Usage(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+		.Usage(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
 		.DebugName("VkRenderBuffers.Lightmap")
-		.Create(fb->device.get());
+		.Create(fb->GetDevice());
 
 	Lightmap.View = ImageViewBuilder()
 		.Type(VK_IMAGE_VIEW_TYPE_2D_ARRAY)
 		.Image(Lightmap.Image.get(), VK_FORMAT_R16G16B16A16_SFLOAT)
 		.DebugName("VkRenderBuffers.LightmapView")
-		.Create(fb->device.get());
+		.Create(fb->GetDevice());
 
 	auto cmdbuffer = fb->GetCommands()->GetTransferCommands();
 
-	int totalSize = w * h * count * pixelsize;
-
-	auto stagingBuffer = BufferBuilder()
-		.Size(totalSize)
-		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
-		.DebugName("VkHardwareTexture.mStagingBuffer")
-		.Create(fb->device.get());
-
-	uint16_t one = 0x3c00; // half-float 1.0
-	const uint16_t* src = LMTextureData.Data();
-	uint16_t* data = (uint16_t*)stagingBuffer->Map(0, totalSize);
-	for (int i = w * h * count; i > 0; i--)
+	if (count > 0 && newPixelData.Size() >= (size_t)w * h * count * 3)
 	{
-		*(data++) = *(src++);
-		*(data++) = *(src++);
-		*(data++) = *(src++);
-		*(data++) = one;
+		assert(newPixelData.Size() == (size_t)w * h * count * 3);
+
+		int totalSize = w * h * count * pixelsize;
+
+		auto stagingBuffer = BufferBuilder()
+			.Size(totalSize)
+			.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
+			.DebugName("VkHardwareTexture.mStagingBuffer")
+			.Create(fb->GetDevice());
+
+		uint16_t one = 0x3c00; // half-float 1.0
+		const uint16_t* src = newPixelData.Data();
+		uint16_t* data = (uint16_t*)stagingBuffer->Map(0, totalSize);
+		for (int i = w * h * count; i > 0; i--)
+		{
+			*(data++) = *(src++);
+			*(data++) = *(src++);
+			*(data++) = *(src++);
+			*(data++) = one;
+		}
+		stagingBuffer->Unmap();
+
+		VkImageTransition()
+			.AddImage(&Lightmap, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true, 0, 1, 0, LMTextureCount)
+			.Execute(cmdbuffer);
+
+		VkBufferImageCopy region = {};
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		region.imageSubresource.layerCount = count;
+		region.imageExtent.depth = 1;
+		region.imageExtent.width = w;
+		region.imageExtent.height = h;
+		cmdbuffer->copyBufferToImage(stagingBuffer->buffer, Lightmap.Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+		fb->GetCommands()->TransferDeleteList->Add(std::move(stagingBuffer));
+	
+		newPixelData.Clear();
 	}
-	stagingBuffer->Unmap();
 
 	VkImageTransition()
-		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true, 0, count)
+		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false, 0, 1, 0, LMTextureCount)
 		.Execute(cmdbuffer);
-
-	VkBufferImageCopy region = {};
-	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	region.imageSubresource.layerCount = count;
-	region.imageExtent.depth = 1;
-	region.imageExtent.width = w;
-	region.imageExtent.height = h;
-	cmdbuffer->copyBufferToImage(stagingBuffer->buffer, Lightmap.Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-	VkImageTransition()
-		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false, 0, count)
-		.Execute(cmdbuffer);
-
-	fb->GetCommands()->TransferDeleteList->Add(std::move(stagingBuffer));
 }

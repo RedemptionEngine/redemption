@@ -792,9 +792,28 @@ public:
 				break;
 
 			case NAME_lm_suncolor:
-			case NAME_lm_sampledistance:
 				CHECK_N(Zd | Zdt)
-					break;
+				if (CheckInt(key) < 0 || CheckInt(key) > 0xFFFFFF)
+				{
+					DPrintf(DMSG_WARNING, "Sun Color '%x' is out of range %s\n", CheckInt(key));
+				}
+				else
+				{
+					auto n = uint32_t(CheckInt(key));
+					Level->SunColor = FVector3(float((n >> 16) & 0xFF) / 0xFF, float((n >> 8) & 0xFF) / 0xFF, float(n & 0xFF) / 0xFF);
+				}
+				break;
+			case NAME_lm_sampledist:
+				CHECK_N(Zd | Zdt)
+				if (CheckInt(key) >= 0 && CheckInt(key) <= 0xFFFF)
+				{
+					Level->LightmapSampleDistance = CheckInt(key);
+				}
+				else
+				{
+					DPrintf(DMSG_WARNING, "Can't set the global lm_sampledist to %s\n", key.GetChars());
+				}
+				break;
 
 			default:
 				CHECK_N(Zd | Zdt)
@@ -842,6 +861,16 @@ public:
 		{
 			th->special = 0;
 			memset(th->args, 0, sizeof (th->args));
+		}
+
+		if (th->EdNum == 9890) // ZDRAY INFO thing
+		{
+			FAngle angle = FAngle::fromDeg(float(th->angle));
+			FAngle pitch = FAngle::fromDeg(float(th->pitch));
+
+			auto pc = pitch.Cos();
+			Level->SunDirection = -FVector3 { pc * angle.Cos(), pc * angle.Sin(), -pitch.Sin() }; // [RaveYard]: is there a dedicated function for this?
+			Level->lightmaps = true;
 		}
 	}
 
@@ -1166,11 +1195,23 @@ public:
 				ld->healthgroup = CheckInt(key);
 				break;
 
-			case NAME_lm_sampledist_line:
+			case NAME_lm_sampledist:
+				CHECK_N(Zd | Zdt)
+				for (int i = 0; i < 3; ++i)
+					if (!ld->LightmapSampleDistance[i])
+						ld->LightmapSampleDistance[i] = CheckInt(key);
+				break;
 			case NAME_lm_sampledist_top:
+				CHECK_N(Zd | Zdt)
+				ld->LightmapSampleDistance[side_t::top] = CheckInt(key);
+				break;
 			case NAME_lm_sampledist_mid:
+				CHECK_N(Zd | Zdt)
+				ld->LightmapSampleDistance[side_t::mid] = CheckInt(key);
+				break;
 			case NAME_lm_sampledist_bot:
 				CHECK_N(Zd | Zdt)
+				ld->LightmapSampleDistance[side_t::bottom] = CheckInt(key);
 				break;
 
 			default:
@@ -1516,12 +1557,24 @@ public:
 					sd->Flags |= WALLF_EXTCOLOR;
 				break;
 
-			case NAME_lm_sampledist_line:
+			case NAME_lm_sampledist:
+				CHECK_N(Zd | Zdt)
+				for (int i = 0; i < 3; ++i)
+					if (!sd->textures[i].LightmapSampleDistance)
+						sd->textures[i].LightmapSampleDistance = CheckInt(key);
+				break;
 			case NAME_lm_sampledist_top:
+				CHECK_N(Zd | Zdt)
+				sd->textures[side_t::top].LightmapSampleDistance = CheckInt(key);
+				break;
 			case NAME_lm_sampledist_mid:
+				CHECK_N(Zd | Zdt)
+				sd->textures[side_t::mid].LightmapSampleDistance = CheckInt(key);
+				break;
 			case NAME_lm_sampledist_bot:
 				CHECK_N(Zd | Zdt)
-					break;
+				sd->textures[side_t::bottom].LightmapSampleDistance = CheckInt(key);
+				break;
 
 #if 0		// specs are to rough and too vague - needs to be cleared first how this works.
 			case NAME_skew_top_type:
@@ -2191,9 +2244,18 @@ public:
 					break;
 
 				case NAME_lm_sampledist_floor:
+					CHECK_N(Zd | Zdt)
+					sec->planes[sector_t::floor].LightmapSampleDistance = CheckInt(key);
+					break;
+
 				case NAME_lm_sampledist_ceiling:
 					CHECK_N(Zd | Zdt)
+					sec->planes[sector_t::ceiling].LightmapSampleDistance = CheckInt(key);
 					break;
+
+				case NAME_lm_dynamic:
+					Flag(sec->Flags, SECF_LM_DYNAMIC, key);
+					continue;
 
 				default:
 					if (strnicmp("user_", key.GetChars(), 5))

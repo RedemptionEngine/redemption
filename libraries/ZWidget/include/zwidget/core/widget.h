@@ -2,6 +2,8 @@
 
 #include <string>
 #include <memory>
+#include <variant>
+#include <unordered_map>
 #include "canvas.h"
 #include "rect.h"
 #include "colorf.h"
@@ -39,15 +41,31 @@ public:
 
 	// Widget noncontent area
 	void SetNoncontentSizes(double left, double top, double right, double bottom);
-	double GetNoncontentLeft() const { return Noncontent.Left; }
-	double GetNoncontentTop() const { return Noncontent.Top; }
-	double GetNoncontentRight() const { return Noncontent.Right; }
-	double GetNoncontentBottom() const { return Noncontent.Bottom; }
+	double GetNoncontentLeft() const { return GetStyleDouble("noncontent-left"); }
+	double GetNoncontentTop() const { return GetStyleDouble("noncontent-top"); }
+	double GetNoncontentRight() const { return GetStyleDouble("noncontent-right"); }
+	double GetNoncontentBottom() const { return GetStyleDouble("noncontent-bottom"); }
 
 	// Widget frame box
 	Rect GetFrameGeometry() const;
 	void SetFrameGeometry(const Rect& geometry);
 	void SetFrameGeometry(double x, double y, double width, double height) { SetFrameGeometry(Rect::xywh(x, y, width, height)); }
+
+	// Style properties
+	void SetStyleClass(const std::string& styleClass);
+	const std::string& GetStyleClass() const { return StyleClass; }
+	void SetStyleState(const std::string& state);
+	const std::string& GetStyleState() const { return StyleState; }
+	void SetStyleBool(const std::string& propertyName, bool value);
+	void SetStyleInt(const std::string& propertyName, int value);
+	void SetStyleDouble(const std::string& propertyName, double value);
+	void SetStyleString(const std::string& propertyName, const std::string& value);
+	void SetStyleColor(const std::string& propertyName, const Colorf& value);
+	bool GetStyleBool(const std::string& propertyName) const;
+	int GetStyleInt(const std::string& propertyName) const;
+	double GetStyleDouble(const std::string& propertyName) const;
+	std::string GetStyleString(const std::string& propertyName) const;
+	Colorf GetStyleColor(const std::string& propertyName) const;
 
 	void SetWindowBackground(const Colorf& color);
 	void SetWindowBorderColor(const Colorf& color);
@@ -85,7 +103,7 @@ public:
 	void CaptureMouse();
 	void ReleaseMouseCapture();
 
-	bool GetKeyState(EInputKey key);
+	bool GetKeyState(InputKey key);
 
 	std::string GetClipboardText();
 	void SetClipboardText(const std::string& text);
@@ -112,18 +130,18 @@ public:
 	static Size GetScreenSize();
 
 protected:
-	virtual void OnPaintFrame(Canvas* canvas) { }
+	virtual void OnPaintFrame(Canvas* canvas);
 	virtual void OnPaint(Canvas* canvas) { }
-	virtual bool OnMouseDown(const Point& pos, int key) { return false; }
-	virtual bool OnMouseDoubleclick(const Point& pos, int key) { return false; }
-	virtual bool OnMouseUp(const Point& pos, int key) { return false; }
-	virtual bool OnMouseWheel(const Point& pos, EInputKey key) { return false; }
+	virtual bool OnMouseDown(const Point& pos, InputKey key) { return false; }
+	virtual bool OnMouseDoubleclick(const Point& pos, InputKey key) { return false; }
+	virtual bool OnMouseUp(const Point& pos, InputKey key) { return false; }
+	virtual bool OnMouseWheel(const Point& pos, InputKey key) { return false; }
 	virtual void OnMouseMove(const Point& pos) { }
 	virtual void OnMouseLeave() { }
 	virtual void OnRawMouseMove(int dx, int dy) { }
 	virtual void OnKeyChar(std::string chars) { }
-	virtual void OnKeyDown(EInputKey key) { }
-	virtual void OnKeyUp(EInputKey key) { }
+	virtual void OnKeyDown(InputKey key) { }
+	virtual void OnKeyUp(InputKey key) { }
 	virtual void OnGeometryChanged() { }
 	virtual void OnClose() { delete this; }
 	virtual void OnSetFocus() { }
@@ -138,14 +156,14 @@ private:
 	// DisplayWindowHost
 	void OnWindowPaint() override;
 	void OnWindowMouseMove(const Point& pos) override;
-	void OnWindowMouseDown(const Point& pos, EInputKey key) override;
-	void OnWindowMouseDoubleclick(const Point& pos, EInputKey key) override;
-	void OnWindowMouseUp(const Point& pos, EInputKey key) override;
-	void OnWindowMouseWheel(const Point& pos, EInputKey key) override;
+	void OnWindowMouseDown(const Point& pos, InputKey key) override;
+	void OnWindowMouseDoubleclick(const Point& pos, InputKey key) override;
+	void OnWindowMouseUp(const Point& pos, InputKey key) override;
+	void OnWindowMouseWheel(const Point& pos, InputKey key) override;
 	void OnWindowRawMouseMove(int dx, int dy) override;
 	void OnWindowKeyChar(std::string chars) override;
-	void OnWindowKeyDown(EInputKey key) override;
-	void OnWindowKeyUp(EInputKey key) override;
+	void OnWindowKeyDown(InputKey key) override;
+	void OnWindowKeyUp(InputKey key) override;
 	void OnWindowGeometryChanged() override;
 	void OnWindowClose() override;
 	void OnWindowActivated() override;
@@ -167,14 +185,6 @@ private:
 
 	Colorf WindowBackground = Colorf::fromRgba8(240, 240, 240);
 
-	struct
-	{
-		double Left = 0.0;
-		double Top = 0.0;
-		double Right = 0.0;
-		double Bottom = 0.0;
-	} Noncontent;
-
 	std::string WindowTitle;
 	std::unique_ptr<DisplayWindow> DispWindow;
 	std::unique_ptr<Canvas> DispCanvas;
@@ -184,6 +194,11 @@ private:
 	bool HiddenFlag = false;
 
 	StandardCursor CurrentCursor = StandardCursor::arrow;
+
+	std::string StyleClass = "widget";
+	std::string StyleState;
+	typedef std::variant<bool, int, double, std::string, Colorf> PropertyVariant;
+	std::unordered_map<std::string, PropertyVariant> StyleProperties;
 
 	Widget(const Widget&) = delete;
 	Widget& operator=(const Widget&) = delete;

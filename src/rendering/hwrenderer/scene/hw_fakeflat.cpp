@@ -34,10 +34,9 @@
 #include "hw_fakeflat.h"
 #include "hw_drawinfo.h"
 #include "hw_cvars.h"
+#include "hw_drawcontext.h"
 #include "r_utility.h"
 #include "texturemanager.h"
-
-static sector_t **fakesectorbuffer;
 
 extern thread_local bool isWorkerThread;
 
@@ -186,24 +185,17 @@ area_t hw_CheckViewArea(vertex_t *v1, vertex_t *v2, sector_t *frontsector, secto
 	return area_default;
 }
 
-//==========================================================================
-//
-// 
-//
-//==========================================================================
-static FMemArena FakeSectorAllocator(20 * sizeof(sector_t));
-
-static sector_t *allocateSector(sector_t *sec)
+static sector_t *allocateSector(HWDrawContext* drawctx, sector_t *sec)
 {
-	if (fakesectorbuffer == nullptr)
+	if (drawctx->fakesectorbuffer == nullptr)
 	{
 		unsigned numsectors = sec->Level->sectors.Size();
-		fakesectorbuffer = (sector_t**)FakeSectorAllocator.Alloc(numsectors * sizeof(sector_t*));
-		memset(fakesectorbuffer, 0, numsectors * sizeof(sector_t*));
+		drawctx->fakesectorbuffer = (sector_t**)drawctx->FakeSectorAllocator.Alloc(numsectors * sizeof(sector_t*));
+		memset(drawctx->fakesectorbuffer, 0, numsectors * sizeof(sector_t*));
 	}
 	auto sectornum = sec->sectornum;
-	fakesectorbuffer[sectornum] = (sector_t*)FakeSectorAllocator.Alloc(sizeof(sector_t));
-	return fakesectorbuffer[sectornum];
+	drawctx->fakesectorbuffer[sectornum] = (sector_t*)drawctx->FakeSectorAllocator.Alloc(sizeof(sector_t));
+	return drawctx->fakesectorbuffer[sectornum];
 }
 
 //==========================================================================
@@ -213,7 +205,7 @@ static sector_t *allocateSector(sector_t *sec)
 //
 //==========================================================================
 
-sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *localcopy)
+sector_t * hw_FakeFlat(HWDrawContext* drawctx, sector_t * sec, area_t in_area, bool back, sector_t *localcopy)
 {
 	if (!sec->GetHeightSec() || sec->heightsec==sec) 
 	{
@@ -221,8 +213,8 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 		// visual glitches because upper amd lower textures overlap.
 		if (back && (sec->MoreFlags & SECMF_OVERLAPPING))
 		{
-			if (fakesectorbuffer && fakesectorbuffer[sec->sectornum]) return fakesectorbuffer[sec->sectornum];
-			auto dest = localcopy? localcopy : allocateSector(sec);
+			if (drawctx->fakesectorbuffer && drawctx->fakesectorbuffer[sec->sectornum]) return drawctx->fakesectorbuffer[sec->sectornum];
+			auto dest = localcopy? localcopy : allocateSector(drawctx, sec);
 			*dest = *sec;
 			dest->floorplane = sec->ceilingplane;
 			dest->floorplane.FlipVert();
@@ -241,9 +233,9 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 	}
 #endif
 
-	if (fakesectorbuffer && fakesectorbuffer[sec->sectornum])
+	if (drawctx->fakesectorbuffer && drawctx->fakesectorbuffer[sec->sectornum])
 	{
-		return fakesectorbuffer[sec->sectornum];
+		return drawctx->fakesectorbuffer[sec->sectornum];
 	}
 	assert(!(isWorkerThread && localcopy == nullptr));
 
@@ -255,7 +247,7 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 	int diffTex = (sec->heightsec->MoreFlags & SECMF_CLIPFAKEPLANES);
 	sector_t * s = sec->heightsec;
 	
-	auto dest = localcopy ? localcopy : allocateSector(sec);
+	auto dest = localcopy ? localcopy : allocateSector(drawctx, sec);
 	*dest = *sec;
 
 	// Replace floor and ceiling height with control sector's heights.
@@ -266,8 +258,7 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 			dest->SetTexture(sector_t::floor, s->GetTexture(sector_t::floor), false);
 			dest->SetPlaneTexZQuick(sector_t::floor, s->GetPlaneTexZ(sector_t::floor));
 			dest->iboindex[sector_t::floor] = sec->iboindex[sector_t::vbo_fakefloor];
-			for (int n = 0; n < screen->mPipelineNbr; n++)
-				dest->vboheight[n][sector_t::floor] = s->vboheight[n][sector_t::floor];
+			dest->vboheight[sector_t::floor] = s->vboheight[sector_t::floor];
 		}
 		else if (s->MoreFlags & SECMF_FAKEFLOORONLY)
 		{
@@ -293,8 +284,7 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 		dest->floorplane   = s->floorplane;
 
 		dest->iboindex[sector_t::floor] = sec->iboindex[sector_t::vbo_fakefloor];
-		for (int n = 0; n < screen->mPipelineNbr; n++)
-			dest->vboheight[n][sector_t::floor] = s->vboheight[n][sector_t::floor];
+		dest->vboheight[sector_t::floor] = s->vboheight[sector_t::floor];
 	}
 
 	if (!(s->MoreFlags&SECMF_FAKEFLOORONLY))
@@ -306,8 +296,7 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 				dest->SetTexture(sector_t::ceiling, s->GetTexture(sector_t::ceiling), false);
 				dest->SetPlaneTexZQuick(sector_t::ceiling, s->GetPlaneTexZ(sector_t::ceiling));
 				dest->iboindex[sector_t::ceiling] = sec->iboindex[sector_t::vbo_fakeceiling];
-				for (int n = 0; n < screen->mPipelineNbr; n++)
-					dest->vboheight[n][sector_t::ceiling] = s->vboheight[n][sector_t::ceiling];
+				dest->vboheight[sector_t::ceiling] = s->vboheight[sector_t::ceiling];
 			}
 		}
 		else
@@ -315,8 +304,7 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 			dest->ceilingplane  = s->ceilingplane;
 			dest->SetPlaneTexZQuick(sector_t::ceiling, s->GetPlaneTexZ(sector_t::ceiling));
 			dest->iboindex[sector_t::ceiling] = sec->iboindex[sector_t::vbo_fakeceiling];
-			for (int n = 0; n < screen->mPipelineNbr; n++)
-				dest->vboheight[n][sector_t::ceiling] = s->vboheight[n][sector_t::ceiling];
+			dest->vboheight[sector_t::ceiling] = s->vboheight[sector_t::ceiling];
 		}
 	}
 
@@ -330,12 +318,10 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 		dest->ceilingplane.FlipVert();
 
 		dest->iboindex[sector_t::floor] = sec->iboindex[sector_t::floor];
-		for (int n = 0; n < screen->mPipelineNbr; n++)
-			dest->vboheight[n][sector_t::floor] = sec->vboheight[n][sector_t::floor];
+		dest->vboheight[sector_t::floor] = sec->vboheight[sector_t::floor];
 
 		dest->iboindex[sector_t::ceiling] = sec->iboindex[sector_t::vbo_fakefloor];
-		for (int n = 0; n < screen->mPipelineNbr; n++)
-			dest->vboheight[n][sector_t::ceiling] = s->vboheight[n][sector_t::floor];
+		dest->vboheight[sector_t::ceiling] = s->vboheight[sector_t::floor];
 
 		dest->ClearPortal(sector_t::ceiling);
 
@@ -385,12 +371,10 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 		dest->floorplane.FlipVert();
 
 		dest->iboindex[sector_t::floor] = sec->iboindex[sector_t::vbo_fakeceiling];
-		for (int n = 0; n < screen->mPipelineNbr; n++)
-			dest->vboheight[n][sector_t::floor] = sec->vboheight[n][sector_t::ceiling];
+		dest->vboheight[sector_t::floor] = sec->vboheight[sector_t::ceiling];
 
 		dest->iboindex[sector_t::ceiling] = sec->iboindex[sector_t::ceiling];
-		for (int n = 0; n < screen->mPipelineNbr; n++)
-			dest->vboheight[n][sector_t::ceiling] = s->vboheight[n][sector_t::ceiling];
+		dest->vboheight[sector_t::ceiling] = s->vboheight[sector_t::ceiling];
 
 		dest->ClearPortal(sector_t::floor);
 
@@ -425,8 +409,8 @@ sector_t * hw_FakeFlat(sector_t * sec, area_t in_area, bool back, sector_t *loca
 }
 
 
-void hw_ClearFakeFlat()
+void hw_ClearFakeFlat(HWDrawContext* drawctx)
 {
-	FakeSectorAllocator.FreeAll();
-	fakesectorbuffer = nullptr;
+	drawctx->FakeSectorAllocator.FreeAll();
+	drawctx->fakesectorbuffer = nullptr;
 }

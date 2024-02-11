@@ -7,9 +7,14 @@
 #include "version.h"
 #include "i_interface.h"
 #include "gstrings.h"
+#include "c_cvars.h"
 #include <zwidget/core/resourcedata.h>
 #include <zwidget/window/window.h>
 #include <zwidget/widgets/tabwidget/tabwidget.h>
+
+#if defined(EXTRAARGS)
+CVAR(String, additional_parameters, "", CVAR_ARCHIVE | CVAR_NOSET | CVAR_GLOBALCONFIG);
+#endif
 
 int LauncherWindow::ExecModal(WadStuff* wads, int numwads, int defaultiwad, int* autoloadflags)
 {
@@ -28,10 +33,6 @@ int LauncherWindow::ExecModal(WadStuff* wads, int numwads, int defaultiwad, int*
 
 LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, int defaultiwad, int* autoloadflags) : Widget(nullptr, WidgetType::Window)
 {
-	SetWindowBackground(Colorf::fromRgba8(51, 51, 51));
-	SetWindowBorderColor(Colorf::fromRgba8(51, 51, 51));
-	SetWindowCaptionColor(Colorf::fromRgba8(33, 33, 33));
-	SetWindowCaptionTextColor(Colorf::fromRgba8(226, 223, 219));
 	SetWindowTitle(GAMENAME);
 
 	Banner = new LauncherBanner(this);
@@ -46,6 +47,10 @@ LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, int defaultiwad, int
 
 	UpdateLanguage();
 
+#if defined(EXTRAARGS)
+	PlayGame->SetExtraArgs(static_cast<FString>(additional_parameters).GetChars());
+#endif
+
 	Pages->SetCurrentWidget(PlayGame);
 	PlayGame->SetFocus();
 }
@@ -54,11 +59,15 @@ void LauncherWindow::Start()
 {
 	Settings->Save();
 
+#if defined(EXTRAARGS)
 	std::string extraargs = PlayGame->GetExtraArgs();
-	if (!extraargs.empty())
+	if (extraargs != static_cast<FString>(additional_parameters).GetChars())
 	{
+		additional_parameters = extraargs.c_str();
+
 		// To do: restart the process like the cocoa backend is doing?
 	}
+#endif
 
 	ExecResult = PlayGame->GetSelectedGame();
 	DisplayWindow::ExitLoop();

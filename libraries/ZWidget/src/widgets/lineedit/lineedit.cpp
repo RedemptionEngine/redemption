@@ -5,7 +5,7 @@
 
 LineEdit::LineEdit(Widget* parent) : Widget(parent)
 {
-	SetNoncontentSizes(5.0, 3.0, 5.0, 3.0);
+	SetStyleClass("lineedit");
 
 	timer = new Timer(this);
 	timer->FuncExpired = [=]() { OnTimerExpired(); };
@@ -301,9 +301,9 @@ void LineEdit::OnMouseMove(const Point& pos)
 	}
 }
 
-bool LineEdit::OnMouseDown(const Point& pos, int key)
+bool LineEdit::OnMouseDown(const Point& pos, InputKey key)
 {
-	if (key == IK_LeftMouse)
+	if (key == InputKey::LeftMouse)
 	{
 		if (HasFocus())
 		{
@@ -321,14 +321,14 @@ bool LineEdit::OnMouseDown(const Point& pos, int key)
 	return true;
 }
 
-bool LineEdit::OnMouseDoubleclick(const Point& pos, int key)
+bool LineEdit::OnMouseDoubleclick(const Point& pos, InputKey key)
 {
 	return true;
 }
 
-bool LineEdit::OnMouseUp(const Point& pos, int key)
+bool LineEdit::OnMouseUp(const Point& pos, InputKey key)
 {
-	if (mouse_selecting && key == IK_LeftMouse)
+	if (mouse_selecting && key == InputKey::LeftMouse)
 	{
 		if (ignore_mouse_events) // This prevents text selection from changing from what was set when focus was gained.
 		{
@@ -412,12 +412,12 @@ void LineEdit::OnKeyChar(std::string chars)
 	}
 }
 
-void LineEdit::OnKeyDown(EInputKey key)
+void LineEdit::OnKeyDown(InputKey key)
 {
 	if (FuncIgnoreKeyDown && FuncIgnoreKeyDown(key))
 		return;
 
-	if (key == IK_Enter)
+	if (key == InputKey::Enter)
 	{
 		if (FuncEnterPressed)
 			FuncEnterPressed();
@@ -430,12 +430,12 @@ void LineEdit::OnKeyDown(EInputKey key)
 		timer->Start(500); // don't blink cursor when moving or typing.
 	}
 
-	if (key == IK_Enter || key == IK_Escape || key == IK_Tab)
+	if (key == InputKey::Enter || key == InputKey::Escape || key == InputKey::Tab)
 	{
 		// Do not consume these.
 		return;
 	}
-	else if (key == IK_A && GetKeyState(IK_Ctrl))
+	else if (key == InputKey::A && GetKeyState(InputKey::Ctrl))
 	{
 		// select all
 		SetTextSelection(0, (int)text.size());
@@ -443,7 +443,7 @@ void LineEdit::OnKeyDown(EInputKey key)
 		UpdateTextClipping();
 		Update();
 	}
-	else if (key == IK_C && GetKeyState(IK_Ctrl))
+	else if (key == InputKey::C && GetKeyState(InputKey::Ctrl))
 	{
 		if (!password_mode)	// Do not allow copying the password to clipboard
 		{
@@ -456,54 +456,54 @@ void LineEdit::OnKeyDown(EInputKey key)
 		// Do not consume messages on read only component (only allow CTRL-A and CTRL-C)
 		return;
 	}
-	else if (key == IK_Left)
+	else if (key == InputKey::Left)
 	{
-		Move(-1, GetKeyState(IK_Ctrl), GetKeyState(IK_Shift));
+		Move(-1, GetKeyState(InputKey::Ctrl), GetKeyState(InputKey::Shift));
 	}
-	else if (key == IK_Right)
+	else if (key == InputKey::Right)
 	{
-		Move(1, GetKeyState(IK_Ctrl), GetKeyState(IK_Shift));
+		Move(1, GetKeyState(InputKey::Ctrl), GetKeyState(InputKey::Shift));
 	}
-	else if (key == IK_Backspace)
+	else if (key == InputKey::Backspace)
 	{
 		Backspace();
 		UpdateTextClipping();
 	}
-	else if (key == IK_Delete)
+	else if (key == InputKey::Delete)
 	{
 		Del();
 		UpdateTextClipping();
 	}
-	else if (key == IK_Home)
+	else if (key == InputKey::Home)
 	{
 		SetSelectionStart(cursor_pos);
 		cursor_pos = 0;
-		if (GetKeyState(IK_Shift))
+		if (GetKeyState(InputKey::Shift))
 			SetSelectionLength(-selection_start);
 		else
 			SetTextSelection(0, 0);
 		UpdateTextClipping();
 		Update();
 	}
-	else if (key == IK_End)
+	else if (key == InputKey::End)
 	{
 		SetSelectionStart(cursor_pos);
 		cursor_pos = (int)text.size();
-		if (GetKeyState(IK_Shift))
+		if (GetKeyState(InputKey::Shift))
 			SetSelectionLength((int)text.size() - selection_start);
 		else
 			SetTextSelection(0, 0);
 		UpdateTextClipping();
 		Update();
 	}
-	else if (key == IK_X && GetKeyState(IK_Ctrl))
+	else if (key == InputKey::X && GetKeyState(InputKey::Ctrl))
 	{
 		std::string str = GetSelection();
 		DeleteSelectedText();
 		SetClipboardText(str);
 		UpdateTextClipping();
 	}
-	else if (key == IK_V && GetKeyState(IK_Ctrl))
+	else if (key == InputKey::V && GetKeyState(InputKey::Ctrl))
 	{
 		std::string str = GetClipboardText();
 		std::string::const_iterator end_str = std::remove(str.begin(), str.end(), '\n');
@@ -574,7 +574,7 @@ void LineEdit::OnKeyDown(EInputKey key)
 
 		UpdateTextClipping();
 	}
-	else if (GetKeyState(IK_Ctrl) && key == IK_Z)
+	else if (GetKeyState(InputKey::Ctrl) && key == InputKey::Z)
 	{
 		if (!readonly)
 		{
@@ -583,7 +583,7 @@ void LineEdit::OnKeyDown(EInputKey key)
 			SetText(tmp);
 		}
 	}
-	else if (key == IK_Shift)
+	else if (key == InputKey::Shift)
 	{
 		if (selection_start == -1)
 			SetTextSelection(cursor_pos, 0);
@@ -593,7 +593,7 @@ void LineEdit::OnKeyDown(EInputKey key)
 		FuncAfterEditChanged();
 }
 
-void LineEdit::OnKeyUp(EInputKey key)
+void LineEdit::OnKeyUp(InputKey key)
 {
 }
 
@@ -815,6 +815,8 @@ int LineEdit::GetCharacterIndex(double mouse_x)
 void LineEdit::UpdateTextClipping()
 {
 	Canvas* canvas = GetCanvas();
+	if (!canvas)
+		return;
 
 	Size text_size = GetVisualTextSize(canvas, clip_start_offset, (int)text.size() - clip_start_offset);
 
@@ -1065,18 +1067,6 @@ std::string LineEdit::GetVisibleTextAfterSelection()
 	}
 }
 
-void LineEdit::OnPaintFrame(Canvas* canvas)
-{
-	double w = GetFrameGeometry().width;
-	double h = GetFrameGeometry().height;
-	Colorf bordercolor = Colorf::fromRgba8(100, 100, 100);
-	canvas->fillRect(Rect::xywh(0.0, 0.0, w, h), Colorf::fromRgba8(38, 38, 38));
-	canvas->fillRect(Rect::xywh(0.0, 0.0, w, 1.0), bordercolor);
-	canvas->fillRect(Rect::xywh(0.0, h - 1.0, w, 1.0), bordercolor);
-	canvas->fillRect(Rect::xywh(0.0, 0.0, 1.0, h - 0.0), bordercolor);
-	canvas->fillRect(Rect::xywh(w - 1.0, 0.0, 1.0, h - 0.0), bordercolor);
-}
-
 void LineEdit::OnPaint(Canvas* canvas)
 {
 	std::string txt_before = GetVisibleTextBeforeSelection();
@@ -1099,21 +1089,21 @@ void LineEdit::OnPaint(Canvas* canvas)
 	{
 		// Draw selection box.
 		Rect selection_rect = GetSelectionRect();
-		canvas->fillRect(selection_rect, HasFocus() ? Colorf::fromRgba8(100, 100, 100) : Colorf::fromRgba8(68, 68, 68));
+		canvas->fillRect(selection_rect, HasFocus() ? GetStyleColor("selection-color") : GetStyleColor("no-focus-selection-color"));
 	}
 
 	// Draw text before selection
 	if (!txt_before.empty())
 	{
-		canvas->drawText(Point(0.0, canvas->verticalTextAlign().baseline), Colorf::fromRgba8(255, 255, 255), txt_before);
+		canvas->drawText(Point(0.0, canvas->verticalTextAlign().baseline), GetStyleColor("color"), txt_before);
 	}
 	if (!txt_selected.empty())
 	{
-		canvas->drawText(Point(size_before.width, canvas->verticalTextAlign().baseline), Colorf::fromRgba8(255, 255, 255), txt_selected);
+		canvas->drawText(Point(size_before.width, canvas->verticalTextAlign().baseline), GetStyleColor("color"), txt_selected);
 	}
 	if (!txt_after.empty())
 	{
-		canvas->drawText(Point(size_before.width + size_selected.width, canvas->verticalTextAlign().baseline), Colorf::fromRgba8(255, 255, 255), txt_after);
+		canvas->drawText(Point(size_before.width + size_selected.width, canvas->verticalTextAlign().baseline), GetStyleColor("color"), txt_after);
 	}
 
 	// draw cursor
@@ -1122,7 +1112,7 @@ void LineEdit::OnPaint(Canvas* canvas)
 		if (cursor_blink_visible)
 		{
 			Rect cursor_rect = GetCursorRect();
-			canvas->fillRect(cursor_rect, Colorf::fromRgba8(255, 255, 255));
+			canvas->fillRect(cursor_rect, GetStyleColor("color"));
 		}
 	}
 }

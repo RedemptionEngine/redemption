@@ -108,7 +108,7 @@ void AddLightToList(FDynLightData &dld, int group, FDynamicLight * light, bool f
 	}
 
 	float shadowIndex;
-	if (screen->mShadowMap.Enabled()) // note: with shadowmaps switched off, we cannot rely on properly set indices anymore.
+	if (screen->mShadowMap->Enabled()) // note: with shadowmaps switched off, we cannot rely on properly set indices anymore.
 	{
 		shadowIndex = light->mShadowmapIndex + 1.0f;
 	}
@@ -155,3 +155,39 @@ void AddLightToList(FDynLightData &dld, int group, FDynamicLight * light, bool f
 	data[15] = 0.0f; // unused
 }
 
+void AddSunLightToList(FDynLightData& dld, float x, float y, float z, const FVector3& sundir, const FVector3& suncolor)
+{
+	// Cheap way of faking a directional light
+	float dist = 100000.0f;
+	float radius = 100000000.0f;
+	x += sundir.X * dist;
+	y += sundir.Y * dist;
+	z += sundir.Z * dist;
+
+	int i = 0;
+	float lightType = 0.0f;
+	float spotInnerAngle = 0.0f;
+	float spotOuterAngle = 0.0f;
+	float spotDirX = 0.0f;
+	float spotDirY = 0.0f;
+	float spotDirZ = 0.0f;
+	float shadowIndex = -1025.f; // Note: 1025 disables shadowmap and the attenuate flag is in the sign bit of the float
+
+	float* data = &dld.arrays[i][dld.arrays[i].Reserve(16)];
+	data[0] = float(x);
+	data[1] = float(z);
+	data[2] = float(y);
+	data[3] = radius;
+	data[4] = suncolor.X;
+	data[5] = suncolor.Y;
+	data[6] = suncolor.Z;
+	data[7] = shadowIndex;
+	data[8] = spotDirX;
+	data[9] = spotDirY;
+	data[10] = spotDirZ;
+	data[11] = lightType;
+	data[12] = spotInnerAngle;
+	data[13] = spotOuterAngle;
+	data[14] = 0.0f; // unused
+	data[15] = 0.0f; // unused
+}

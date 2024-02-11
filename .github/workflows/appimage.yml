@@ -1,4 +1,4 @@
-name: Continuous Integration
+name: App Image
 
 on: [push, pull_request]
 
@@ -9,7 +9,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Install GZDoom dependencies
+      - name: Install VKDoom dependencies
         run: |
           sudo apt-get update
           sudo apt-get install clang-12 libsdl2-dev libvpx-dev libwebp-dev cmake -y

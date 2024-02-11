@@ -3,13 +3,19 @@
 #include "vectors.h"
 #include "matrix.h"
 #include "hw_material.h"
+#include "hw_levelmesh.h"
 #include "texmanip.h"
 #include "version.h"
 #include "i_interface.h"
+#include "hw_viewpointuniforms.h"
+#include "hw_cvars.h"
+
+#include <atomic>
 
 struct FColormap;
-class IVertexBuffer;
-class IIndexBuffer;
+class IBuffer;
+struct HWViewpointUniforms;
+struct FDynLightData;
 
 enum EClearTarget
 {
@@ -25,6 +31,7 @@ enum ERenderEffect
 	EFF_SPHEREMAP,
 	EFF_BURN,
 	EFF_STENCIL,
+	EFF_PORTAL,
 
 	MAX_EFFECTS
 };
@@ -87,24 +94,6 @@ struct FStateVec4
 	}
 };
 
-struct FMaterialState
-{
-	FMaterial *mMaterial = nullptr;
-	int mClampMode;
-	int mTranslation;
-	int mOverrideShader;
-	bool mChanged;
-
-	void Reset()
-	{
-		mMaterial = nullptr;
-		mTranslation = 0;
-		mClampMode = CLAMP_NONE;
-		mOverrideShader = -1;
-		mChanged = false;
-	}
-};
-
 struct FDepthBiasState
 {
 	float mFactor;
@@ -119,6 +108,8 @@ struct FDepthBiasState
 	}
 };
 
+struct FFlatVertex;
+
 enum EPassType
 {
 	NORMAL_PASS,
@@ -126,82 +117,14 @@ enum EPassType
 	MAX_PASS_TYPES
 };
 
-struct FVector4PalEntry
+inline FVector4 toFVector4(PalEntry pe) { const float normScale = 1.0f / 255.0f; return FVector4(pe.r * normScale, pe.g * normScale, pe.b * normScale, pe.a * normScale); }
+
+struct Fogball
 {
-	float r, g, b, a;
-
-	bool operator==(const FVector4PalEntry &other) const
-	{
-		return r == other.r && g == other.g && b == other.b && a == other.a;
-	}
-
-	bool operator!=(const FVector4PalEntry &other) const
-	{
-		return r != other.r || g != other.g || b != other.b || a != other.a;
-	}
-
-	FVector4PalEntry &operator=(PalEntry newvalue)
-	{
-		const float normScale = 1.0f / 255.0f;
-		r = newvalue.r * normScale;
-		g = newvalue.g * normScale;
-		b = newvalue.b * normScale;
-		a = newvalue.a * normScale;
-		return *this;
-	}
-
-	FVector4PalEntry& SetIA(PalEntry newvalue)
-	{
-		const float normScale = 1.0f / 255.0f;
-		r = newvalue.r * normScale;
-		g = newvalue.g * normScale;
-		b = newvalue.b * normScale;
-		a = newvalue.a;
-		return *this;
-	}
-
-	FVector4PalEntry& SetFlt(float v1, float v2, float v3, float v4)	
-	{
-		r = v1;
-		g = v2;
-		b = v3;
-		a = v4;
-		return *this;
-	}
-
-};
-
-struct StreamData
-{
-	FVector4PalEntry uObjectColor;
-	FVector4PalEntry uObjectColor2;
-	FVector4 uDynLightColor;
-	FVector4PalEntry uAddColor;
-	FVector4PalEntry uTextureAddColor;
-	FVector4PalEntry uTextureModulateColor;
-	FVector4PalEntry uTextureBlendColor;
-	FVector4PalEntry uFogColor;
-	float uDesaturationFactor;
-	float uInterpolationFactor;
-	float timer;
-	int useVertexData;
-	FVector4 uVertexColor;
-	FVector4 uVertexNormal;
-
-	FVector4 uGlowTopPlane;
-	FVector4 uGlowTopColor;
-	FVector4 uGlowBottomPlane;
-	FVector4 uGlowBottomColor;
-
-	FVector4 uGradientTopPlane;
-	FVector4 uGradientBottomPlane;
-
-	FVector4 uSplitTopPlane;
-	FVector4 uSplitBottomPlane;
-
-	FVector4 uDetailParms;
-	FVector4 uNpotEmulation;
-	FVector4 padding1, padding2, padding3;
+	FVector3 Position;
+	float Radius;
+	FVector3 Color;
+	float Fog;
 };
 
 class FRenderState
@@ -211,28 +134,23 @@ protected:
 	uint8_t mTextureEnabled:1;
 	uint8_t mGlowEnabled : 1;
 	uint8_t mGradientEnabled : 1;
-	uint8_t mModelMatrixEnabled : 1;
-	uint8_t mTextureMatrixEnabled : 1;
 	uint8_t mSplitEnabled : 1;
 	uint8_t mBrightmapEnabled : 1;
 
 	int mLightIndex;
 	int mBoneIndexBase;
+	int mFogballIndex;
 	int mSpecialEffect;
 	int mTextureMode;
 	int mTextureClamp;
 	int mTextureModeFlags;
 	int mSoftLight;
-	float mLightParms[4];
-
-	float mAlphaThreshold;
-	float mClipSplit[2];
-
+	int mLightMode = -1;
 
 	int mColorMapSpecial;
 	float mColorMapFlash;
 
-	StreamData mStreamData = {};
+	SurfaceUniforms mSurfaceUniforms = {};
 	PalEntry mFogColor;
 
 	FRenderStyle mRenderStyle;
@@ -240,47 +158,44 @@ protected:
 	FMaterialState mMaterial;
 	FDepthBiasState mBias;
 
-	IVertexBuffer *mVertexBuffer;
+	IBuffer* mVertexBuffer;
 	int mVertexOffsets[2];	// one per binding point
-	IIndexBuffer *mIndexBuffer;
+	IBuffer* mIndexBuffer;
 
 	EPassType mPassType = NORMAL_PASS;
 
 public:
 
 	uint64_t firstFrame = 0;
-	VSMatrix mModelMatrix;
-	VSMatrix mTextureMatrix;
-
-public:
 
 	void Reset()
 	{
 		mTextureEnabled = true;
 		mBrightmapEnabled = mGradientEnabled = mFogEnabled = mGlowEnabled = false;
 		mFogColor = 0xffffffff;
-		mStreamData.uFogColor = mFogColor;
+		mSurfaceUniforms.uFogColor = toFVector4(mFogColor);
 		mTextureMode = -1;
 		mTextureClamp = 0;
 		mTextureModeFlags = 0;
-		mStreamData.uDesaturationFactor = 0.0f;
-		mAlphaThreshold = 0.5f;
-		mModelMatrixEnabled = false;
-		mTextureMatrixEnabled = false;
+		mSurfaceUniforms.uDesaturationFactor = 0.0f;
+		mSurfaceUniforms.uAlphaThreshold = 0.5f;
 		mSplitEnabled = false;
-		mStreamData.uAddColor = 0;
-		mStreamData.uObjectColor = 0xffffffff;
-		mStreamData.uObjectColor2 = 0;
-		mStreamData.uTextureBlendColor = 0;
-		mStreamData.uTextureAddColor = 0;
-		mStreamData.uTextureModulateColor = 0;
+		mSurfaceUniforms.uAddColor = toFVector4(PalEntry(0));
+		mSurfaceUniforms.uObjectColor = toFVector4(PalEntry(0xffffffff));
+		mSurfaceUniforms.uObjectColor2 = toFVector4(PalEntry(0));
+		mSurfaceUniforms.uTextureBlendColor = toFVector4(PalEntry(0));
+		mSurfaceUniforms.uTextureAddColor = toFVector4(PalEntry(0));
+		mSurfaceUniforms.uTextureModulateColor = toFVector4(PalEntry(0));
 		mSoftLight = 0;
-		mLightParms[0] = mLightParms[1] = mLightParms[2] = 0.0f;
-		mLightParms[3] = -1.f;
+		mSurfaceUniforms.uLightDist = 0.0f;
+		mSurfaceUniforms.uLightFactor = 0.0f;
+		mSurfaceUniforms.uFogDensity = 0.0f;
+		mSurfaceUniforms.uLightLevel = -1.0f;
 		mSpecialEffect = EFF_NONE;
 		mLightIndex = -1;
 		mBoneIndexBase = -1;
-		mStreamData.uInterpolationFactor = 0;
+		mFogballIndex = -1;
+		mSurfaceUniforms.uInterpolationFactor = 0;
 		mRenderStyle = DefaultRenderStyle();
 		mMaterial.Reset();
 		mBias.Reset();
@@ -293,59 +208,57 @@ public:
 		mVertexOffsets[0] = mVertexOffsets[1] = 0;
 		mIndexBuffer = nullptr;
 
-		mStreamData.uVertexColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-		mStreamData.uGlowTopColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-		mStreamData.uGlowBottomColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-		mStreamData.uGlowTopPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
-		mStreamData.uGlowBottomPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
-		mStreamData.uGradientTopPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
-		mStreamData.uGradientBottomPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
-		mStreamData.uSplitTopPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
-		mStreamData.uSplitBottomPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
-		mStreamData.uDynLightColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-		mStreamData.uDetailParms = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mSurfaceUniforms.uVertexColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+		mSurfaceUniforms.uGlowTopColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mSurfaceUniforms.uGlowBottomColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mSurfaceUniforms.uGlowTopPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mSurfaceUniforms.uGlowBottomPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mSurfaceUniforms.uGradientTopPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mSurfaceUniforms.uGradientBottomPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mSurfaceUniforms.uSplitTopPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mSurfaceUniforms.uSplitBottomPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mSurfaceUniforms.uDynLightColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+		mSurfaceUniforms.uDetailParms = { 0.0f, 0.0f, 0.0f, 0.0f };
 #ifdef NPOT_EMULATION
-		mStreamData.uNpotEmulation = { 0,0,0,0 };
+		mSurfaceUniforms.uNpotEmulation = { 0,0,0,0 };
 #endif
-		mModelMatrix.loadIdentity();
-		mTextureMatrix.loadIdentity();
 		ClearClipSplit();
 	}
 
 	void SetNormal(FVector3 norm)
 	{
-		mStreamData.uVertexNormal = { norm.X, norm.Y, norm.Z, 0.f };
+		mSurfaceUniforms.uVertexNormal = { norm.X, norm.Y, norm.Z, 0.f };
 	}
 
 	void SetNormal(float x, float y, float z)
 	{
-		mStreamData.uVertexNormal = { x, y, z, 0.f };
+		mSurfaceUniforms.uVertexNormal = { x, y, z, 0.f };
 	}
 
 	void SetColor(float r, float g, float b, float a = 1.f, int desat = 0)
 	{
-		mStreamData.uVertexColor = { r, g, b, a };
-		mStreamData.uDesaturationFactor = desat * (1.0f / 255.0f);
+		mSurfaceUniforms.uVertexColor = { r, g, b, a };
+		mSurfaceUniforms.uDesaturationFactor = desat * (1.0f / 255.0f);
 	}
 
 	void SetColor(PalEntry pe, int desat = 0)
 	{
 		const float scale = 1.0f / 255.0f;
-		mStreamData.uVertexColor = { pe.r * scale, pe.g * scale, pe.b * scale, pe.a * scale };
-		mStreamData.uDesaturationFactor = desat * (1.0f / 255.0f);
+		mSurfaceUniforms.uVertexColor = { pe.r * scale, pe.g * scale, pe.b * scale, pe.a * scale };
+		mSurfaceUniforms.uDesaturationFactor = desat * (1.0f / 255.0f);
 	}
 
 	void SetColorAlpha(PalEntry pe, float alpha = 1.f, int desat = 0)
 	{
 		const float scale = 1.0f / 255.0f;
-		mStreamData.uVertexColor = { pe.r * scale, pe.g * scale, pe.b * scale, alpha };
-		mStreamData.uDesaturationFactor = desat * (1.0f / 255.0f);
+		mSurfaceUniforms.uVertexColor = { pe.r * scale, pe.g * scale, pe.b * scale, alpha };
+		mSurfaceUniforms.uDesaturationFactor = desat * (1.0f / 255.0f);
 	}
 
 	void ResetColor()
 	{
-		mStreamData.uVertexColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-		mStreamData.uDesaturationFactor = 0.0f;
+		mSurfaceUniforms.uVertexColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+		mSurfaceUniforms.uDesaturationFactor = 0.0f;
 	}
 
 	void SetTextureClamp(bool on)
@@ -407,8 +320,8 @@ public:
 	{
 		if (mGlowEnabled && !on)
 		{
-			mStreamData.uGlowTopColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-			mStreamData.uGlowBottomColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+			mSurfaceUniforms.uGlowTopColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+			mSurfaceUniforms.uGlowBottomColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 		}
 		mGlowEnabled = on;
 	}
@@ -427,94 +340,89 @@ public:
 	{
 		if (mSplitEnabled && !on)
 		{
-			mStreamData.uSplitTopPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
-			mStreamData.uSplitBottomPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
+			mSurfaceUniforms.uSplitTopPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
+			mSurfaceUniforms.uSplitBottomPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
 		}
 		mSplitEnabled = on;
 	}
 
-	void EnableModelMatrix(bool on)
-	{
-		mModelMatrixEnabled = on;
-	}
-
-	void EnableTextureMatrix(bool on)
-	{
-		mTextureMatrixEnabled = on;
-	}
-
 	void SetGlowParams(float *t, float *b)
 	{
-		mStreamData.uGlowTopColor = { t[0], t[1], t[2], t[3] };
-		mStreamData.uGlowBottomColor = { b[0], b[1], b[2], b[3] };
+		mSurfaceUniforms.uGlowTopColor = { t[0], t[1], t[2], t[3] };
+		mSurfaceUniforms.uGlowBottomColor = { b[0], b[1], b[2], b[3] };
 	}
 
 	void SetSoftLightLevel(int llevel, int blendfactor = 0)
 	{
-		if (blendfactor == 0) mLightParms[3] = llevel / 255.f;
-		else mLightParms[3] = -1.f;
+		if (blendfactor == 0) mSurfaceUniforms.uLightLevel = llevel / 255.f;
+		else mSurfaceUniforms.uLightLevel = -1.f;
 	}
 
 	void SetNoSoftLightLevel()
 	{
-		 mLightParms[3] = -1.f;
+		mSurfaceUniforms.uLightLevel = -1.f;
+	}
+
+	void SetLightMode(int lightmode)
+	{
+		mLightMode = lightmode;
 	}
 
 	void SetGlowPlanes(const FVector4 &tp, const FVector4& bp)
 	{
-		mStreamData.uGlowTopPlane = tp;
-		mStreamData.uGlowBottomPlane = bp;
+		mSurfaceUniforms.uGlowTopPlane = tp;
+		mSurfaceUniforms.uGlowBottomPlane = bp;
 	}
 
 	void SetGradientPlanes(const FVector4& tp, const FVector4& bp)
 	{
-		mStreamData.uGradientTopPlane = tp;
-		mStreamData.uGradientBottomPlane = bp;
+		mSurfaceUniforms.uGradientTopPlane = tp;
+		mSurfaceUniforms.uGradientBottomPlane = bp;
 	}
 
 	void SetSplitPlanes(const FVector4& tp, const FVector4& bp)
 	{
-		mStreamData.uSplitTopPlane = tp;
-		mStreamData.uSplitBottomPlane = bp;
+		mSurfaceUniforms.uSplitTopPlane = tp;
+		mSurfaceUniforms.uSplitBottomPlane = bp;
 	}
 
 	void SetDetailParms(float xscale, float yscale, float bias)
 	{
-		mStreamData.uDetailParms = { xscale, yscale, bias, 0 };
+		mSurfaceUniforms.uDetailParms = { xscale, yscale, bias, 0 };
 	}
 
 	void SetDynLight(float r, float g, float b)
 	{
-		mStreamData.uDynLightColor.X = r;
-		mStreamData.uDynLightColor.Y = g;
-		mStreamData.uDynLightColor.Z = b;
+		mSurfaceUniforms.uDynLightColor.X = r;
+		mSurfaceUniforms.uDynLightColor.Y = g;
+		mSurfaceUniforms.uDynLightColor.Z = b;
 	}
 
 	void SetScreenFade(float f)
 	{
 		// This component is otherwise unused.
-		mStreamData.uDynLightColor.W = f;
+		mSurfaceUniforms.uDynLightColor.W = f;
 	}
 
 	void SetObjectColor(PalEntry pe)
 	{
-		mStreamData.uObjectColor = pe;
+		mSurfaceUniforms.uObjectColor = toFVector4(pe);
 	}
 
 	void SetObjectColor2(PalEntry pe)
 	{
-		mStreamData.uObjectColor2 = pe;
+		mSurfaceUniforms.uObjectColor2 = toFVector4(pe);
 	}
 
 	void SetAddColor(PalEntry pe)
 	{
-		mStreamData.uAddColor = pe;
+		mSurfaceUniforms.uAddColor = toFVector4(pe);
 	}
 
 	void SetNpotEmulation(float factor, float offset)
 	{
 #ifdef NPOT_EMULATION
-		mStreamData.uNpotEmulation = { offset, factor, 0, 0 };
+		mSurfaceUniforms.uNpotEmulation = { offset, factor, 0, 0 };
 #endif
 	}
 
@@ -522,36 +430,37 @@ public:
 	{
 		if (!texfx || texfx->AddColor.a == 0)
 		{
-			mStreamData.uTextureAddColor.a = 0;	// we only need to set the flags to 0
+			mSurfaceUniforms.uTextureAddColor.W = 0.0f;	// we only need to set the flags to 0
 		}
 		else
 		{
 			// set up the whole thing
-			mStreamData.uTextureAddColor.SetIA(texfx->AddColor);
+			const float normScale = 1.0f / 255.0f;
+			mSurfaceUniforms.uTextureAddColor = FVector4(texfx->AddColor.r * normScale, texfx->AddColor.g * normScale, texfx->AddColor.b * normScale, texfx->AddColor.a);
 			auto pe = texfx->ModulateColor;
-			mStreamData.uTextureModulateColor.SetFlt(pe.r * pe.a / 255.f, pe.g * pe.a / 255.f, pe.b * pe.a / 255.f, texfx->DesaturationFactor);
-			mStreamData.uTextureBlendColor = texfx->BlendColor;
+			mSurfaceUniforms.uTextureModulateColor = FVector4(pe.r * pe.a / 255.f, pe.g * pe.a / 255.f, pe.b * pe.a / 255.f, texfx->DesaturationFactor);
+			mSurfaceUniforms.uTextureBlendColor = toFVector4(texfx->BlendColor);
 		}
 	}
 	void SetTextureColors(float* modColor, float* addColor, float* blendColor)
 	{
-		mStreamData.uTextureAddColor.SetFlt(addColor[0], addColor[1], addColor[2], addColor[3]);
-		mStreamData.uTextureModulateColor.SetFlt(modColor[0], modColor[1], modColor[2], modColor[3]);
-		mStreamData.uTextureBlendColor.SetFlt(blendColor[0], blendColor[1], blendColor[2], blendColor[3]);
+		mSurfaceUniforms.uTextureAddColor = FVector4(addColor[0], addColor[1], addColor[2], addColor[3]);
+		mSurfaceUniforms.uTextureModulateColor = FVector4(modColor[0], modColor[1], modColor[2], modColor[3]);
+		mSurfaceUniforms.uTextureBlendColor = FVector4(blendColor[0], blendColor[1], blendColor[2], blendColor[3]);
 	}
 
 	void SetFog(PalEntry c, float d)
 	{
 		const float LOG2E = 1.442692f;	// = 1/log(2)
 		mFogColor = c;
-		mStreamData.uFogColor = mFogColor;
-		if (d >= 0.0f) mLightParms[2] = d * (-LOG2E / 64000.f);
+		mSurfaceUniforms.uFogColor = toFVector4(mFogColor);
+		if (d >= 0.0f) mSurfaceUniforms.uFogDensity = d * (-LOG2E / 64000.f);
 	}
 
 	void SetLightParms(float f, float d)
 	{
-		mLightParms[1] = f;
-		mLightParms[0] = d;
+		mSurfaceUniforms.uLightFactor = f;
+		mSurfaceUniforms.uLightDist = d;
 	}
 
 	PalEntry GetFogColor() const
@@ -561,8 +470,8 @@ public:
 
 	void AlphaFunc(int func, float thresh)
 	{
-		if (func == Alpha_Greater) mAlphaThreshold = thresh;
-		else mAlphaThreshold = thresh - 0.001f;
+		if (func == Alpha_Greater) mSurfaceUniforms.uAlphaThreshold = thresh;
+		else mSurfaceUniforms.uAlphaThreshold = thresh - 0.001f;
 	}
 
 	void SetLightIndex(int index)
@@ -573,6 +482,11 @@ public:
 	void SetBoneIndexBase(int index)
 	{
 		mBoneIndexBase = index;
+	}
+
+	void SetFogballIndex(int index)
+	{
+		mFogballIndex = index;
 	}
 
 	void SetRenderStyle(FRenderStyle rs)
@@ -619,7 +533,7 @@ private:
 		mMaterial.mChanged = true;
 		mTextureModeFlags = mat->GetLayerFlags();
 		auto scale = mat->GetDetailScale();
-		mStreamData.uDetailParms = { scale.X, scale.Y, 2, 0 };
+		mSurfaceUniforms.uDetailParms = { scale.X, scale.Y, 2, 0 };
 	}
 
 public:
@@ -643,54 +557,54 @@ public:
 
 	void SetClipSplit(float bottom, float top)
 	{
-		mClipSplit[0] = bottom;
-		mClipSplit[1] = top;
+		mSurfaceUniforms.uClipSplit.X = bottom;
+		mSurfaceUniforms.uClipSplit.Y = top;
 	}
 
 	void SetClipSplit(float *vals)
 	{
-		memcpy(mClipSplit, vals, 2 * sizeof(float));
+		mSurfaceUniforms.uClipSplit.X = vals[0];
+		mSurfaceUniforms.uClipSplit.Y = vals[1];
 	}
 
 	void GetClipSplit(float *out)
 	{
-		memcpy(out, mClipSplit, 2 * sizeof(float));
+		out[0] = mSurfaceUniforms.uClipSplit.X;
+		out[1] = mSurfaceUniforms.uClipSplit.Y;
 	}
 
 	void ClearClipSplit()
 	{
-		mClipSplit[0] = -1000000.f;
-		mClipSplit[1] = 1000000.f;
+		mSurfaceUniforms.uClipSplit.X = -1000000.f;
+		mSurfaceUniforms.uClipSplit.Y = 1000000.f;
 	}
 
-	void SetVertexBuffer(IVertexBuffer *vb, int offset0, int offset1)
+	void SetVertexBuffer(IBuffer* vb, int offset0 = 0, int offset1 = 0)
 	{
-		assert(vb);
 		mVertexBuffer = vb;
 		mVertexOffsets[0] = offset0;
 		mVertexOffsets[1] = offset1;
 	}
 
-	void SetIndexBuffer(IIndexBuffer *ib)
+	void SetIndexBuffer(IBuffer* ib)
 	{
 		mIndexBuffer = ib;
 	}
 
-	template <class T> void SetVertexBuffer(T *buffer)
+	void SetFlatVertexBuffer()
 	{
-		auto ptrs = buffer->GetBufferObjects(); 
-		SetVertexBuffer(ptrs.first, 0, 0);
-		SetIndexBuffer(ptrs.second);
+		SetVertexBuffer(nullptr);
+		SetIndexBuffer(nullptr);
 	}
 
 	void SetInterpolationFactor(float fac)
 	{
-		mStreamData.uInterpolationFactor = fac;
+		mSurfaceUniforms.uInterpolationFactor = fac;
 	}
 
 	float GetInterpolationFactor()
 	{
-		return mStreamData.uInterpolationFactor;
+		return mSurfaceUniforms.uInterpolationFactor;
 	}
 
 	void EnableDrawBufferAttachments(bool on) // Used by fog boundary drawer
@@ -719,7 +633,41 @@ public:
 		mColorMapFlash = flash;
 	}
 
+	int Set2DViewpoint(int width, int height, int palLightLevels = 0)
+	{
+		HWViewpointUniforms matrices;
+		matrices.mViewMatrix.loadIdentity();
+		matrices.mNormalViewMatrix.loadIdentity();
+		matrices.mViewHeight = 0;
+		matrices.mGlobVis = 1.f;
+		matrices.mPalLightLevels = palLightLevels;
+		matrices.mClipLine.X = -10000000.0f;
+		matrices.mShadowFilter = gl_light_shadow_filter;
+		matrices.mLightBlendMode = 0;
+		matrices.mProjectionMatrix.ortho(0, (float)width, (float)height, 0, -1.0f, 1.0f);
+		matrices.CalcDependencies();
+		return SetViewpoint(matrices);
+	}
+
 	// API-dependent render interface
+
+	// Worker threads
+	virtual void FlushCommands() { }
+
+	// Vertices
+	virtual std::pair<FFlatVertex*, unsigned int> AllocVertices(unsigned int count) = 0;
+	virtual void SetShadowData(const TArray<FFlatVertex>& vertices, const TArray<uint32_t>& indexes) = 0;
+	virtual void UpdateShadowData(unsigned int index, const FFlatVertex* vertices, unsigned int count) = 0;
+	virtual void ResetVertices() = 0;
+
+	// Buffers
+	virtual int SetViewpoint(const HWViewpointUniforms& vp) = 0;
+	virtual void SetViewpoint(int index) = 0;
+	virtual void SetModelMatrix(const VSMatrix& matrix, const VSMatrix& normalMatrix) = 0;
+	virtual void SetTextureMatrix(const VSMatrix& matrix) = 0;
+	virtual int UploadLights(const FDynLightData& lightdata) = 0;
+	virtual int UploadBones(const TArray<VSMatrix>& bones) = 0;
+	virtual int UploadFogballs(const TArray<Fogball>& balls) = 0;
 
 	// Draw commands
 	virtual void ClearScreen() = 0;
@@ -734,13 +682,11 @@ public:
 	virtual void SetColorMask(bool r, bool g, bool b, bool a) = 0;	// Used by portals.
 	virtual void SetStencil(int offs, int op, int flags=-1) = 0;	// Used by portal setup and render hacks.
 	virtual void SetCulling(int mode) = 0;						// Used by model drawer only.
-	virtual void EnableClipDistance(int num, bool state) = 0;	// Use by sprite sorter for vertical splits.
 	virtual void Clear(int targets) = 0;						// not used during normal rendering
 	virtual void EnableStencil(bool on) = 0;					// always on for 3D, always off for 2D
 	virtual void SetScissor(int x, int y, int w, int h) = 0;	// constant for 3D, changes for 2D
 	virtual void SetViewport(int x, int y, int w, int h) = 0;	// constant for all 3D and all 2D
 	virtual void EnableDepthTest(bool on) = 0;					// used by 2D, portals and render hacks.
-	virtual void EnableMultisampling(bool on) = 0;				// only active for 2D
 	virtual void EnableLineSmooth(bool on) = 0;					// constant setting for each 2D drawer operation
 	virtual void EnableDrawBuffers(int count, bool apply = false) = 0;	// Used by SSAO and EnableDrawBufferAttachments
 
@@ -749,5 +695,14 @@ public:
 		SetColorMask(on, on, on, on);
 	}
 
+	// Draw level mesh
+	virtual void DrawLevelMeshSurfaces(bool noFragmentShader) { }
+	virtual void DrawLevelMeshPortals(bool noFragmentShader) { }
+	virtual int GetNextQueryIndex() { return 0; }
+	virtual void BeginQuery() { }
+	virtual void EndQuery() { }
+	virtual void GetQueryResults(int start, int count, TArray<bool>& results) { }
+
+	friend class Mesh;
 };
 

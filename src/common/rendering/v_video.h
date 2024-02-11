@@ -50,33 +50,11 @@
 
 struct FPortalSceneState;
 class FSkyVertexBuffer;
-class IIndexBuffer;
-class IVertexBuffer;
-class IDataBuffer;
-class FFlatVertexBuffer;
-class HWViewpointBuffer;
-class FLightBuffer;
+class IBuffer;
 struct HWDrawInfo;
 class FMaterial;
 class FGameTexture;
 class FRenderState;
-class BoneBuffer;
-
-enum EHWCaps
-{
-	// [BB] Added texture compression flags.
-	RFL_TEXTURE_COMPRESSION = 1,
-	RFL_TEXTURE_COMPRESSION_S3TC = 2,
-
-	RFL_SHADER_STORAGE_BUFFER = 4,
-	RFL_BUFFER_STORAGE = 8,
-
-	RFL_NO_CLIP_PLANES = 32,
-
-	RFL_INVALIDATE_BUFFER = 64,
-	RFL_DEBUG = 128,
-};
-
 
 extern int DisplayWidth, DisplayHeight;
 
@@ -94,6 +72,8 @@ struct FColormap;
 enum FTextureFormat : uint32_t;
 class FModelRenderer;
 struct SamplerUniform;
+struct FVertexBufferAttribute;
+struct MeshApplyData;
 
 //
 // VIDEO
@@ -133,19 +113,13 @@ private:
 
 public:
 	// Hardware render state that needs to be exposed to the API independent part of the renderer. For ease of access this is stored in the base class.
-	int hwcaps = 0;								// Capability flags
-	float glslversion = 0;						// This is here so that the differences between old OpenGL and new OpenGL/Vulkan can be handled by platform independent code.
 	int instack[2] = { 0,0 };					// this is globally maintained state for portal recursion avoidance.
 	int stencilValue = 0;						// Global stencil test value
 	unsigned int uniformblockalignment = 256;	// Hardware dependent uniform buffer alignment.
 	unsigned int maxuniformblock = 65536;
 	const char *vendorstring;					// We have to account for some issues with particular vendors.
 	FSkyVertexBuffer *mSkyData = nullptr;		// the sky vertex buffer
-	FFlatVertexBuffer *mVertexData = nullptr;	// Global vertex data
-	HWViewpointBuffer *mViewpoints = nullptr;	// Viewpoint render data.
-	FLightBuffer *mLights = nullptr;			// Dynamic lights
-	BoneBuffer* mBones = nullptr;				// Model bones
-	IShadowMap mShadowMap;
+	ShadowMap* mShadowMap = nullptr;
 
 	int mGameScreenWidth = 0;
 	int mGameScreenHeight = 0;
@@ -163,27 +137,9 @@ public:
 	virtual void InitializeState() = 0;	// For stuff that needs 'screen' set.
 	virtual bool IsVulkan() { return false; }
 	virtual bool IsPoly() { return false; }
-	virtual int GetShaderCount();
 	virtual bool CompileNextShader() { return true; }
-	void SetAABBTree(hwrenderer::LevelAABBTree * tree)
-	{
-		mShadowMap.SetAABBTree(tree);
-	}
-	virtual void SetLevelMesh(hwrenderer::LevelMesh *mesh) { }
-	bool allowSSBO() const
-	{
-#ifndef HW_BLOCK_SSBO
-		return true;
-#else
-		return mPipelineType == 0;
-#endif
-	}
-
-	// SSBOs have quite worse performance for read only data, so keep this around only as long as Vulkan has not been adapted yet.
-	bool useSSBO() 
-	{
-		return IsVulkan();
-	}
+	virtual void SetLevelMesh(LevelMesh *mesh) { }
+	virtual void UpdateLightmaps(const TArray<LightmapTile*>& tiles) {}
 
 	virtual DCanvas* GetCanvas() { return nullptr; }
 
@@ -234,13 +190,9 @@ public:
 	virtual int GetClientHeight() = 0;
 	virtual void BlurScene(float amount) {}
 
-	virtual void InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData) {}
-
     // Interface to hardware rendering resources
-	virtual IVertexBuffer *CreateVertexBuffer() { return nullptr; }
-	virtual IIndexBuffer *CreateIndexBuffer() { return nullptr; }
-	virtual IDataBuffer *CreateDataBuffer(int bindingpoint, bool ssbo, bool needsresize) { return nullptr; }
-	bool BuffersArePersistent() { return !!(hwcaps & RFL_BUFFER_STORAGE); }
+	virtual IBuffer* CreateVertexBuffer(int numBindingPoints, int numAttributes, size_t stride, const FVertexBufferAttribute* attrs) { return nullptr; }
+	virtual IBuffer* CreateIndexBuffer() { return nullptr; }
 
 	// This is overridable in case Vulkan does it differently.
 	virtual bool RenderTextureIsFlipped() const
@@ -256,7 +208,7 @@ public:
 	virtual void FirstEye() {}
 	virtual void NextEye(int eyecount) {}
 	virtual void SetSceneRenderTarget(bool useSSAO) {}
-	virtual void UpdateShadowMap() {}
+	virtual void SetShadowMaps(const TArray<float>& lights, hwrenderer::LevelAABBTree* tree, bool newTree) {}
 	virtual void WaitForCommands(bool finish) {}
 	virtual void SetSaveBuffers(bool yes) {}
 	virtual void ImageTransitionScene(bool unknown) {}
@@ -265,11 +217,16 @@ public:
 	virtual void RenderTextureView(FCanvasTexture* tex, std::function<void(IntRect&)> renderFunc) {}
 	virtual void SetActiveRenderTarget() {}
 
+	// Get the array index for the material in the textures array accessible from shaders
+	virtual int GetBindlessTextureIndex(FMaterial* material, int clampmode, int translation) { return -1; }
+
 	// Screen wiping
 	virtual FTexture *WipeStartScreen();
 	virtual FTexture *WipeEndScreen();
 
 	virtual void PostProcessScene(bool swscene, int fixedcm, float flash, const std::function<void()> &afterBloomDrawEndScene2D) { if (afterBloomDrawEndScene2D) afterBloomDrawEndScene2D(); }
+
+	virtual int GetLevelMeshPipelineID(const MeshApplyData& applyData, const SurfaceUniforms& surfaceUniforms, const FMaterialState& material) { return 0; }
 
 	void ScaleCoordsFromWindow(int16_t &x, int16_t &y);
 
@@ -289,8 +246,8 @@ public:
 	static float GetZNear() { return 5.f; }
 	static float GetZFar() { return 65536.f; }
 
-	// The original size of the framebuffer as selected in the video menu.
 	uint64_t FrameTime = 0;
+	uint64_t FrameTimeNS = 0;
 
 private:
 	uint64_t fpsLimitTime = 0;
@@ -316,7 +273,6 @@ void V_InitScreen();
 void V_Init2 ();
 
 void V_Shutdown ();
-int V_GetBackend();
 
 inline bool IsRatioWidescreen(int ratio) { return (ratio & 3) != 0; }
 extern bool setsizeneeded, setmodeneeded;

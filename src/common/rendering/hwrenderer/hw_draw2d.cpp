@@ -36,7 +36,6 @@
 #include "cmdlib.h"
 #include "hwrenderer/data/buffers.h"
 #include "flatvertices.h"
-#include "hwrenderer/data/hw_viewpointbuffer.h"
 #include "hw_clock.h"
 #include "hw_cvars.h"
 #include "hw_renderstate.h"
@@ -62,13 +61,12 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 	twoD.Clock();
 
 	state.SetViewport(x, y, width, height);
-	screen->mViewpoints->Set2D(state, drawer->GetWidth(), drawer->GetHeight());
+	state.Set2DViewpoint(drawer->GetWidth(), drawer->GetHeight());
 
 	state.EnableStencil(false);
 	state.SetStencil(0, SOP_Keep, SF_AllOn);
 	state.Clear(CT_Stencil);
 	state.EnableDepthTest(false);
-	state.EnableMultisampling(false);
 	state.EnableLineSmooth(gl_aalines);
 
 	auto &vertices = drawer->mVertices;
@@ -91,7 +89,8 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 	}
 	F2DVertexBuffer vb;
 	vb.UploadData(&vertices[0], vertices.Size(), &indices[0], indices.Size());
-	state.SetVertexBuffer(&vb);
+	state.SetVertexBuffer(vb.GetBufferObjects().first);
+	state.SetIndexBuffer(vb.GetBufferObjects().second);
 	state.EnableFog(false);
 
 	for(auto &cmd : commands)
@@ -171,8 +170,13 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 			{
 				m[4 * 3 + i] = (FLOATTYPE) cmd.transform.Cells[i][2];
 			}
-			state.mModelMatrix.loadMatrix(m);
-			state.EnableModelMatrix(true);
+
+			VSMatrix modelMatrix;
+			modelMatrix.loadMatrix(m);
+
+			VSMatrix normalModelMatrix;
+			normalModelMatrix.computeNormalMatrix(modelMatrix);
+			state.SetModelMatrix(modelMatrix, normalModelMatrix);
 		}
 
 		if (cmd.mTexture != nullptr && cmd.mTexture->isValid())
@@ -186,10 +190,11 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 			// Canvas textures are stored upside down
 			if (cmd.mTexture->isHardwareCanvas())
 			{
-				state.mTextureMatrix.loadIdentity();
-				state.mTextureMatrix.scale(1.f, -1.f, 1.f);
-				state.mTextureMatrix.translate(0.f, 1.f, 0.0f);
-				state.EnableTextureMatrix(true);
+				VSMatrix textureMatrix;
+				textureMatrix.loadIdentity();
+				textureMatrix.scale(1.f, -1.f, 1.f);
+				textureMatrix.translate(0.f, 1.f, 0.0f);
+				state.SetTextureMatrix(textureMatrix);
 			}
 			if (cmd.mFlags & F2DDrawer::DTF_Burn)
 			{
@@ -203,9 +208,12 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 
 		if (cmd.shape2DBufInfo != nullptr)
 		{
-			state.SetVertexBuffer(&cmd.shape2DBufInfo->buffers[cmd.shape2DBufIndex]);
+			auto& buffers = cmd.shape2DBufInfo->buffers[cmd.shape2DBufIndex];
+			state.SetVertexBuffer(buffers.GetBufferObjects().first);
+			state.SetIndexBuffer(buffers.GetBufferObjects().second);
 			state.DrawIndexed(DT_Triangles, 0, cmd.shape2DIndexCount);
-			state.SetVertexBuffer(&vb);
+			state.SetVertexBuffer(vb.GetBufferObjects().first);
+			state.SetIndexBuffer(vb.GetBufferObjects().second);
 			if (cmd.shape2DCommandCounter == cmd.shape2DBufInfo->lastCommand)
 			{
 				cmd.shape2DBufInfo->lastCommand = -1;
@@ -240,15 +248,17 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 		state.SetObjectColor(0xffffffff);
 		state.SetObjectColor2(0);
 		state.SetAddColor(0);
-		state.EnableTextureMatrix(false);
-		state.EnableModelMatrix(false);
+		if (cmd.mTexture != nullptr && cmd.mTexture->isValid() && cmd.mTexture->isHardwareCanvas())
+			state.SetTextureMatrix(VSMatrix::identity());
+		if (cmd.useTransform)
+			state.SetModelMatrix(VSMatrix::identity(), VSMatrix::identity());
 		state.SetEffect(EFF_NONE);
 
 	}
 	state.SetScissor(-1, -1, -1, -1);
 
 	state.SetRenderStyle(STYLE_Translucent);
-	state.SetVertexBuffer(screen->mVertexData);
+	state.SetFlatVertexBuffer();
 	state.EnableStencil(false);
 	state.SetStencil(0, SOP_Keep, SF_AllOn);
 	state.EnableTexture(true);

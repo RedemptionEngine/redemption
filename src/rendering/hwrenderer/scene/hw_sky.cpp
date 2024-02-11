@@ -127,7 +127,7 @@ void HWSkyInfo::init(HWDrawInfo *di, sector_t* sec, int skypos, int sky1, PalEnt
 //
 //==========================================================================
 
-void HWWall::SkyPlane(HWWallDispatcher *di, sector_t *sector, int plane, bool allowreflect)
+void HWWall::SkyPlane(HWWallDispatcher *di, FRenderState& state, sector_t *sector, int plane, bool allowreflect)
 {
 	int ptype = -1;
 
@@ -141,10 +141,10 @@ void HWWall::SkyPlane(HWWallDispatcher *di, sector_t *sector, int plane, bool al
 		{
 			HWSkyInfo skyinfo;
 			skyinfo.init(di->di, sector, plane, sector->skytransfer, Colormap.FadeColor);
-			ptype = PORTALTYPE_SKY;
 			sky = &skyinfo;
 		}
-		PutPortal(di, ptype, plane);
+		ptype = PORTALTYPE_SKY;
+		PutPortal(di, state, ptype, plane);
 	}
 	else if (sportal != nullptr)
 	{
@@ -187,7 +187,7 @@ void HWWall::SkyPlane(HWWallDispatcher *di, sector_t *sector, int plane, bool al
 	}
 	if (ptype != -1)
 	{
-		PutPortal(di, ptype, plane);
+		PutPortal(di, state, ptype, plane);
 	}
 }
 
@@ -198,7 +198,7 @@ void HWWall::SkyPlane(HWWallDispatcher *di, sector_t *sector, int plane, bool al
 //
 //==========================================================================
 
-void HWWall::SkyLine(HWWallDispatcher *di, sector_t *fs, line_t *line)
+void HWWall::SkyLine(HWWallDispatcher *di, FRenderState& state, sector_t *fs, line_t *line)
 {
 	FSectorPortal *secport = line->GetTransferredPortal();
 	HWSkyInfo skyinfo;
@@ -222,7 +222,7 @@ void HWWall::SkyLine(HWWallDispatcher *di, sector_t *fs, line_t *line)
 	ztop[1] = zceil[1];
 	zbottom[0] = zfloor[0];
 	zbottom[1] = zfloor[1];
-	PutPortal(di, ptype, -1);
+	PutPortal(di, state, ptype, -1);
 }
 
 
@@ -232,17 +232,17 @@ void HWWall::SkyLine(HWWallDispatcher *di, sector_t *fs, line_t *line)
 //
 //==========================================================================
 
-void HWWall::SkyNormal(HWWallDispatcher *di, sector_t * fs,vertex_t * v1,vertex_t * v2)
+void HWWall::SkyNormal(HWWallDispatcher *di, FRenderState& state, sector_t * fs,vertex_t * v1,vertex_t * v2)
 {
 	ztop[0]=ztop[1]=32768.0f;
 	zbottom[0]=zceil[0];
 	zbottom[1]=zceil[1];
-	SkyPlane(di, fs, sector_t::ceiling, true);
+	SkyPlane(di, state, fs, sector_t::ceiling, true);
 
 	ztop[0]=zfloor[0];
 	ztop[1]=zfloor[1];
 	zbottom[0]=zbottom[1]=-32768.0f;
-	SkyPlane(di, fs, sector_t::floor, true);
+	SkyPlane(di, state, fs, sector_t::floor, true);
 }
 
 //==========================================================================
@@ -251,7 +251,7 @@ void HWWall::SkyNormal(HWWallDispatcher *di, sector_t * fs,vertex_t * v1,vertex_
 //
 //==========================================================================
 
-void HWWall::SkyTop(HWWallDispatcher *di, seg_t * seg,sector_t * fs,sector_t * bs,vertex_t * v1,vertex_t * v2)
+void HWWall::SkyTop(HWWallDispatcher *di, FRenderState& state, seg_t * seg,sector_t * fs,sector_t * bs,vertex_t * v1,vertex_t * v2)
 {
 	if (fs->GetTexture(sector_t::ceiling)==skyflatnum)
 	{
@@ -281,7 +281,7 @@ void HWWall::SkyTop(HWWallDispatcher *di, seg_t * seg,sector_t * fs,sector_t * b
 						ztop[0]=ztop[1]=32768.0f;
 						zbottom[0]=zbottom[1]= 
 							bs->ceilingplane.ZatPoint(v2) + seg->sidedef->GetTextureYOffset(side_t::mid);
-						SkyPlane(di, fs, sector_t::ceiling, false);
+						SkyPlane(di, state, fs, sector_t::ceiling, false);
 						return;
 					}
 				}
@@ -335,7 +335,7 @@ void HWWall::SkyTop(HWWallDispatcher *di, seg_t * seg,sector_t * fs,sector_t * b
 
 	}
 
-	SkyPlane(di, fs, sector_t::ceiling, true);
+	SkyPlane(di, state, fs, sector_t::ceiling, true);
 }
 
 
@@ -345,7 +345,7 @@ void HWWall::SkyTop(HWWallDispatcher *di, seg_t * seg,sector_t * fs,sector_t * b
 //
 //==========================================================================
 
-void HWWall::SkyBottom(HWWallDispatcher *di, seg_t * seg,sector_t * fs,sector_t * bs,vertex_t * v1,vertex_t * v2)
+void HWWall::SkyBottom(HWWallDispatcher *di, FRenderState& state, seg_t * seg,sector_t * fs,sector_t * bs,vertex_t * v1,vertex_t * v2)
 {
 	if (fs->GetTexture(sector_t::floor)==skyflatnum)
 	{
@@ -413,6 +413,6 @@ void HWWall::SkyBottom(HWWallDispatcher *di, seg_t * seg,sector_t * fs,sector_t 
 		ztop[1] = fs->floorplane.ZatPoint(v2);
 	}
 
-	SkyPlane(di, fs, sector_t::floor, true);
+	SkyPlane(di, state, fs, sector_t::floor, true);
 }
 
