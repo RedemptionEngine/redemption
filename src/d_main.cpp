@@ -4083,7 +4083,6 @@ CCMD(type)
 		Printf("%.*s\n", data.size(), data.string());
 	}
 }
-}
 
 extern int playerfornode[MAXNETNODES];
 
