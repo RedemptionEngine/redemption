@@ -261,6 +261,8 @@ class Actor : Thinker native
 	private native int InventoryID;	// internal counter.
 	native uint freezetics;
 	native Vector2 AutomapOffsets;
+	native Array<PathNode> Path;
+	native double LandingSpeed;
 
 	meta String Obituary;		// Player was killed by this actor
 	meta String HitObituary;		// Player was killed by this actor in melee
@@ -366,6 +368,7 @@ class Actor : Thinker native
 	property ShadowAimFactor: ShadowAimFactor;
 	property ShadowPenaltyFactor: ShadowPenaltyFactor;
 	property AutomapOffsets : AutomapOffsets;
+	property LandingSpeed: LandingSpeed;
 	
 	// need some definition work first
 	//FRenderStyle RenderStyle;
@@ -454,6 +457,7 @@ class Actor : Thinker native
 		RenderHidden 0;
 		RenderRequired 0;
 		FriendlySeeBlocks 10; // 10 (blocks) * 128 (one map unit block)
+		LandingSpeed -8; // landing speed from a jump with normal gravity (squats the player's view)
 	}
 	
 	// Functions
@@ -501,7 +505,7 @@ class Actor : Thinker native
 	virtual native bool Slam(Actor victim);
 	virtual void Touch(Actor toucher) {}
 	virtual native void FallAndSink(double grav, double oldfloorz);
-	private native void Substitute(Actor replacement);
+	native bool MorphInto(Actor morph);
 	native ui void DisplayNameTag();
 	native clearscope void DisableLocalRendering(uint playerNum, bool disable);
 	native ui bool ShouldRenderLocally(); // Only clients get to check this, never the playsim.
@@ -565,7 +569,7 @@ class Actor : Thinker native
 	}
 
 	// This is called when a missile bounces off something.
-	virtual int SpecialBounceHit(Actor bounceMobj, Line bounceLine, SecPlane bouncePlane)
+	virtual int SpecialBounceHit(Actor bounceMobj, Line bounceLine, readonly<SecPlane> bouncePlane)
 	{
 		return MHIT_DEFAULT;
 	}
@@ -663,7 +667,7 @@ class Actor : Thinker native
 	// called before and after triggering a teleporter
 	// return false in PreTeleport() to cancel the action early
 	virtual bool PreTeleport( Vector3 destpos, double destangle, int flags ) { return true; }
-	virtual void PostTeleport( Vector3 destpos, double destangle, int flags ) {}
+	virtual void PostTeleport( Vector3 destpos, double destangle, int flags ) { }
 	
 	native virtual bool OkayToSwitchTarget(Actor other);
 	native clearscope static class<Actor> GetReplacement(class<Actor> cls);
@@ -697,7 +701,7 @@ class Actor : Thinker native
 	native void SoundAlert(Actor target, bool splash = false, double maxdist = 0);
 	native void ClearBounce();
 	native TerrainDef GetFloorTerrain();
-	native bool CheckLocalView(int consoleplayer = -1 /* parameter is not used anymore but needed for backward compatibilityö. */);
+	native bool CheckLocalView(int consoleplayer = -1 /* parameter is not used anymore but needed for backward compatibility. */);
 	native bool CheckNoDelay();
 	native bool UpdateWaterLevel (bool splash = true);
 	native bool IsZeroDamage();
@@ -796,6 +800,86 @@ class Actor : Thinker native
 		movecount = random[TryWalk](0, 15);
 		return true;
 	}
+
+	native void ClearPath();
+	native clearscope bool CanPathfind() const;
+	virtual void ReachedNode(Actor mo)
+	{
+		if (!mo)
+		{
+			if (!goal)
+				return;
+			mo = goal;
+		}
+		
+		let node = PathNode(mo);
+		if (!node || !target || (!bKEEPPATH && CheckSight(target)))
+		{
+			ClearPath();
+			return;
+		}
+
+		int i = Path.Find(node) + 1;
+		int end = Path.Size();
+		
+		for (i; i < end; i++)
+		{
+			PathNode next = Path[i];
+
+			if (!next || next == node)
+				continue;
+
+			// 2D checks for floaters, 3D for ground
+			Actor tar = target;
+			bool vrange = bNOVERTICALMELEERANGE;
+			bNOVERTICALMELEERANGE = bFLOAT;
+			target = next;
+
+			bool inrange = CheckMeleeRange();
+
+			target = tar;
+			bNOVERTICALMELEERANGE = vrange;
+
+			if (inrange)
+				continue;
+			
+			// Monsters will never 'reach' AMBUSH flagged nodes. Instead, the engine
+			// indicates they're reached the moment they tele/portal. 
+
+			if (node.bAMBUSH && next.bAMBUSH)
+				continue;
+
+			goal = next;
+			break;
+		}
+
+		if (i >= end)
+			ClearPath();
+		
+	}
+
+	// Return true to mark the node as ineligible for constructing a path along.
+	virtual bool ExcludeNode(PathNode node)
+	{
+		if (!node)	return true;
+
+		// Scale is the size requirements.
+		// STANDSTILL flag is used to require the actor to be bigger instead of smaller.
+		double r = node.Scale.X;
+		double h = node.Scale.Y;
+
+		if (r <= 0.0 && h <= 0.0)
+			return false;
+		
+		// Perfect fit.
+		if (radius == r && height == h)
+			return false; 
+
+		if ((r < radius) || (h < height))
+			return !node.bSTANDSTILL;
+		
+		return false;
+	}
 	
 	native bool TryMove(vector2 newpos, int dropoff, bool missilecheck = false, FCheckPosition tm = null);
 	native bool CheckMove(vector2 newpos, int flags = 0, FCheckPosition tm = null);
@@ -847,7 +931,7 @@ class Actor : Thinker native
 	native void PlayPushSound();
 	native bool BounceActor(Actor blocking, bool onTop);
 	native bool BounceWall(Line l = null);
-	native bool BouncePlane(SecPlane plane);
+	native bool BouncePlane(readonly<SecPlane> plane);
 	native void PlayBounceSound(bool onFloor);
 	native bool ReflectOffActor(Actor blocking);
 
@@ -1406,7 +1490,7 @@ class Actor : Thinker native
 		bool grunted;
 
 		// [RH] only make noise if alive
-		if (self.health > 0 && self.player.morphTics == 0)
+		if (self.health > 0 && !Alternative)
 		{
 			grunted = false;
 			// Why should this number vary by gravity?
