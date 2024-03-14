@@ -35,13 +35,13 @@ jobs:
           os: ubuntu-22.04
           extra_options: -DCMAKE_C_COMPILER=gcc-9 -DCMAKE_CXX_COMPILER=g++-9
           deps_cmdline: sudo apt update && sudo apt install libsdl2-dev libvpx-dev libgtk2.0-dev libwebp-dev
-          build_type: RelWithDebInfo
+          build_type: MinSizeRel
 
         - name: Linux GCC 12
           os: ubuntu-22.04
           extra_options: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12
           deps_cmdline: sudo apt update && sudo apt install libsdl2-dev libvpx-dev libgtk-3-dev libwebp-dev
-          build_type: MinSizeRel
+          build_type: RelWithDebInfo
 
         - name: Linux Clang 11
           os: ubuntu-22.04
@@ -95,21 +95,22 @@ jobs:
         cmake --build build --config ${{ matrix.config.build_type }} --parallel 3
 
     - name: Create Package
-      if: runner.os == 'Windows'  # Remove to make packages of all targets
+      if: runner.os == 'Windows' || matrix.config.name == 'Linux GCC 12'
       shell: bash
       run: |
         cd build
         mkdir package
         if [[ "${{ runner.os }}" == 'Windows' ]]; then
-          cp ${{ matrix.config.build_type }}/redemption.exe ${{ matrix.config.build_type }}/*.pk3 package
+          cp ${{ matrix.config.build_type }}/vkdoom.exe ${{ matrix.config.build_type }}/*.pk3 package
         elif [[ "${{ runner.os }}" == 'macOS' ]]; then
-          cp -r redemption.app package
+          cp -r vkdoom.app package
         elif [[ "${{ runner.os }}" == 'Linux' ]]; then
-          cp redemption *.pk3 package
+          cp vkdoom *.pk3 package
+          strip package/vkdoom
         fi
 
     - name: Upload Package
-      if: runner.os == 'Windows'  # Remove to store packages of all targets
+      if: runner.os == 'Windows' || matrix.config.name == 'Linux GCC 12'
       uses: actions/upload-artifact@v4
       with:
         path: build/package
@@ -129,17 +130,24 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
 
     steps:
-    - name: Download artifact
+    - name: Download Windows artifact
       uses: actions/download-artifact@v4
       with:
         name: Visual Studio 2022 Release
-        path: build/vkdoom-prerelease
+        path: build/vkdoom-windows-prerelease
+
+    - name: Download Linux artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: Linux GCC 12 RelWithDebInfo
+        path: build/vkdoom-linux-prerelease
 
     - name: Zip artifacts
       shell: bash
       run: |
         cd build
-        zip -r vkdoom-prerelease.zip vkdoom-prerelease
+        zip -r vkdoom-windows-prerelease.zip vkdoom-windows-prerelease
+        zip -r vkdoom-linux-prerelease.zip vkdoom-linux-prerelease
 
     - name: Update nightly release
       uses: pyTooling/Actions/releaser@r0
@@ -147,4 +155,5 @@ jobs:
         tag: nightly
         rm: true
         token: ${{ secrets.GITHUB_TOKEN }}
-        files: build/vkdoom-prerelease.zip
+        files: build/vkdoom-windows-prerelease.zip build/vkdoom-linux-prerelease.zip
+

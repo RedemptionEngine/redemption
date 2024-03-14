@@ -76,6 +76,9 @@ EXTERN_CVAR(Bool, r_skipmats)
 // Physical device info
 static std::vector<VulkanCompatibleDevice> SupportedDevices;
 int vkversion;
+static TArray<FString> memheapnames;
+static TArray<VmaBudget> membudgets;
+static int hwtexturecount;
 
 CUSTOM_CVAR(Bool, vk_debug, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
 {
@@ -100,6 +103,28 @@ CCMD(vk_listdevices)
 	{
 		Printf("#%d - %s\n", (int)i, SupportedDevices[i].Device->Properties.Properties.deviceName);
 	}
+}
+
+CCMD(vk_membudget)
+{
+	for (size_t i = 0; i < membudgets.size(); i++)
+	{
+		if (membudgets[i].budget != 0)
+		{
+			Printf("#%d%s - %d MB used out of %d MB estimated budget (%d%%)\n",
+				i, memheapnames[i].GetChars(),
+				(int)(membudgets[i].usage / (1024 * 1024)),
+				(int)(membudgets[i].budget / (1024 * 1024)),
+				(int)(membudgets[i].usage * 100 / membudgets[i].budget));
+		}
+		else
+		{
+			Printf("#%d %s - %d MB used\n",
+				i, memheapnames[i].GetChars(),
+				(int)(membudgets[i].usage / (1024 * 1024)));
+		}
+	}
+	Printf("%d total hardware textures\n", hwtexturecount);
 }
 
 void I_BuildVKDeviceList(FOptionValues* opt)
@@ -196,7 +221,7 @@ void VulkanRenderDevice::InitializeState()
 	}
 
 	uniformblockalignment = (unsigned int)mDevice->PhysicalDevice.Properties.Properties.limits.minUniformBufferOffsetAlignment;
-	maxuniformblock = mDevice->PhysicalDevice.Properties.Properties.limits.maxUniformBufferRange;
+	maxuniformblock = std::min(mDevice->PhysicalDevice.Properties.Properties.limits.maxUniformBufferRange, (uint32_t)1024 * 1024);
 
 	mCommands.reset(new VkCommandBufferManager(this));
 
@@ -478,6 +503,20 @@ TArray<uint8_t> VulkanRenderDevice::GetScreenshotBuffer(int &pitch, ESSType &col
 
 void VulkanRenderDevice::BeginFrame()
 {
+	vmaSetCurrentFrameIndex(mDevice->allocator, 0);
+	membudgets.Resize(mDevice->PhysicalDevice.Properties.Memory.memoryHeapCount);
+	vmaGetHeapBudgets(mDevice->allocator, membudgets.data());
+	if (memheapnames.size() == 0)
+	{
+		memheapnames.Resize(mDevice->PhysicalDevice.Properties.Memory.memoryHeapCount);
+		for (unsigned int i = 0; i < memheapnames.Size(); i++)
+		{
+			bool deviceLocal = !!(mDevice->PhysicalDevice.Properties.Memory.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT);
+			memheapnames[i] = deviceLocal ? " (device local)" : "";
+		}
+	}
+	hwtexturecount = mTextureManager->GetHWTextureCount();
+
 	if (levelMeshChanged)
 	{
 		levelMeshChanged = false;

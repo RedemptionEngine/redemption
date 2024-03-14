@@ -49,7 +49,6 @@ public:
 	LevelMeshSurface* GetSurface(int index) override { return &Surfaces[index]; }
 	unsigned int GetSurfaceIndex(const LevelMeshSurface* surface) const override { return (unsigned int)(ptrdiff_t)(static_cast<const DoomLevelMeshSurface*>(surface) - Surfaces.Data()); }
 	int GetSurfaceCount() override { return Surfaces.Size(); }
-	int AddSurfaceLights(const LevelMeshSurface* surface, LevelMeshLight* list, int listMaxSize) override;
 
 	void BeginFrame(FLevelLocals& doomMap);
 	bool TraceSky(const FVector3& start, FVector3 direction, float dist);
@@ -65,6 +64,8 @@ public:
 	TArray<int> sectorPortals[2]; // index is sector+plane, value is index into the portal list
 	TArray<int> linePortals; // index is linedef, value is index into the portal list
 
+	void CreateLights(FLevelLocals& doomMap);
+
 private:
 	void CreateSurfaces(FLevelLocals& doomMap);
 
@@ -77,17 +78,19 @@ private:
 	void SortIndexes();
 
 	void CreateWallSurface(side_t* side, HWWallDispatcher& disp, MeshBuilder& state, TArray<HWWall>& list, bool isPortal, bool translucent);
-	void CreateFlatSurface(HWFlatDispatcher& disp, MeshBuilder& state, TArray<HWFlat>& list, bool isSky = false);
+	void CreateFlatSurface(HWFlatDispatcher& disp, MeshBuilder& state, TArray<HWFlat>& list, bool isSky, bool translucent);
 
 	void LinkSurfaces(FLevelLocals& doomMap);
 
 	BBox GetBoundsFromSurface(const LevelMeshSurface& surface) const;
 
-	int AddSurfaceToTile(const DoomLevelMeshSurface& surf);
-	int GetSampleDimension(const DoomLevelMeshSurface& surf);
+	int AddSurfaceToTile(const DoomLevelMeshSurface& surf, uint16_t sampleDimension);
+	int GetSampleDimension(const DoomLevelMeshSurface& surf, uint16_t sampleDimension);
 
 	void CreatePortals(FLevelLocals& doomMap);
 	std::pair<FLightNode*, int> GetSurfaceLightNode(const DoomLevelMeshSurface* doomsurf);
+
+	int GetLightIndex(FDynamicLight* light, int portalgroup);
 
 	TArray<SideSurfaceRange> Sides;
 	TArray<FlatSurfaceRange> Flats;

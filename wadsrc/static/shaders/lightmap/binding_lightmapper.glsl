@@ -14,7 +14,11 @@ struct SurfaceInfo
 	uint PortalIndex;
 	int TextureIndex;
 	float Alpha;
-	float Padding;
+	float Padding0;
+	uint LightStart;
+	uint LightEnd;
+	uint Padding1;
+	uint Padding2;
 };
 
 struct PortalInfo
@@ -33,7 +37,7 @@ struct LightInfo
 	float InnerAngleCos;
 	float OuterAngleCos;
 	vec3 SpotDir;
-	float Padding2;
+	float SourceRadius;
 	vec3 Color;
 	float Padding3;
 };
@@ -41,24 +45,25 @@ struct LightInfo
 layout(set = 0, binding = 1) buffer SurfaceIndexBuffer { uint surfaceIndices[]; };
 layout(set = 0, binding = 2) buffer SurfaceBuffer { SurfaceInfo surfaces[]; };
 layout(set = 0, binding = 3) buffer LightBuffer { LightInfo lights[]; };
-layout(set = 0, binding = 4) buffer PortalBuffer { PortalInfo portals[]; };
+layout(set = 0, binding = 4) buffer LightIndexBuffer { int lightIndexes[]; };
+layout(set = 0, binding = 5) buffer PortalBuffer { PortalInfo portals[]; };
 
 struct LightmapRaytracePC
 {
-	uint LightStart;
-	uint LightEnd;
 	int SurfaceIndex;
-	int PushPadding1;
+	int Padding0;
+	int Padding1;
+	int Padding2;
 	vec3 WorldToLocal;
 	float TextureSize;
 	vec3 ProjLocalToU;
-	float PushPadding2;
+	float Padding3;
 	vec3 ProjLocalToV;
-	float PushPadding3;
+	float Padding4;
 	float TileX;
 	float TileY;
 	float TileWidth;
 	float TileHeight;
 };
 
-layout(std430, set = 0, binding = 5) buffer ConstantsBuffer { LightmapRaytracePC constants[]; };
+layout(std430, set = 0, binding = 6) buffer ConstantsBuffer { LightmapRaytracePC constants[]; };
