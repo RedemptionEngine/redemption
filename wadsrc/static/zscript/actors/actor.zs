@@ -261,7 +261,6 @@ class Actor : Thinker native
 	private native int InventoryID;	// internal counter.
 	native uint freezetics;
 	native Vector2 AutomapOffsets;
-	native Array<PathNode> Path;
 	native double LandingSpeed;
 
 	meta String Obituary;		// Player was killed by this actor
@@ -274,7 +273,7 @@ class Actor : Thinker native
 	meta Name BloodType2;		// Bloopsplatter replacement type
 	meta Name BloodType3;		// AxeBlood replacement type
 	meta bool DontHurtShooter;
-	meta int ExplosionRadius;
+	meta double ExplosionRadius;
 	meta int ExplosionDamage;
 	meta int MeleeDamage;
 	meta Sound MeleeSound;
@@ -433,7 +432,7 @@ class Actor : Thinker native
 		DefThreshold 100;
 		BloodType "Blood", "BloodSplatter", "AxeBlood";
 		ExplosionDamage 128;
-		ExplosionRadius -1;	// i.e. use ExplosionDamage value
+		ExplosionRadius -1.0;	// i.e. use ExplosionDamage value
 		MissileHeight 32;
 		SpriteAngle 0;
 		SpriteRotation 0;
@@ -667,7 +666,7 @@ class Actor : Thinker native
 	// called before and after triggering a teleporter
 	// return false in PreTeleport() to cancel the action early
 	virtual bool PreTeleport( Vector3 destpos, double destangle, int flags ) { return true; }
-	virtual void PostTeleport( Vector3 destpos, double destangle, int flags ) { }
+	virtual void PostTeleport( Vector3 destpos, double destangle, int flags ) {}
 	
 	native virtual bool OkayToSwitchTarget(Actor other);
 	native clearscope static class<Actor> GetReplacement(class<Actor> cls);
@@ -701,7 +700,7 @@ class Actor : Thinker native
 	native void SoundAlert(Actor target, bool splash = false, double maxdist = 0);
 	native void ClearBounce();
 	native TerrainDef GetFloorTerrain();
-	native bool CheckLocalView(int consoleplayer = -1 /* parameter is not used anymore but needed for backward compatibility. */);
+	native bool CheckLocalView(int consoleplayer = -1 /* parameter is not used anymore but needed for backward compatibilityö. */);
 	native bool CheckNoDelay();
 	native bool UpdateWaterLevel (bool splash = true);
 	native bool IsZeroDamage();
@@ -799,86 +798,6 @@ class Actor : Thinker native
 		}
 		movecount = random[TryWalk](0, 15);
 		return true;
-	}
-
-	native void ClearPath();
-	native clearscope bool CanPathfind() const;
-	virtual void ReachedNode(Actor mo)
-	{
-		if (!mo)
-		{
-			if (!goal)
-				return;
-			mo = goal;
-		}
-		
-		let node = PathNode(mo);
-		if (!node || !target || (!bKEEPPATH && CheckSight(target)))
-		{
-			ClearPath();
-			return;
-		}
-
-		int i = Path.Find(node) + 1;
-		int end = Path.Size();
-		
-		for (i; i < end; i++)
-		{
-			PathNode next = Path[i];
-
-			if (!next || next == node)
-				continue;
-
-			// 2D checks for floaters, 3D for ground
-			Actor tar = target;
-			bool vrange = bNOVERTICALMELEERANGE;
-			bNOVERTICALMELEERANGE = bFLOAT;
-			target = next;
-
-			bool inrange = CheckMeleeRange();
-
-			target = tar;
-			bNOVERTICALMELEERANGE = vrange;
-
-			if (inrange)
-				continue;
-			
-			// Monsters will never 'reach' AMBUSH flagged nodes. Instead, the engine
-			// indicates they're reached the moment they tele/portal. 
-
-			if (node.bAMBUSH && next.bAMBUSH)
-				continue;
-
-			goal = next;
-			break;
-		}
-
-		if (i >= end)
-			ClearPath();
-		
-	}
-
-	// Return true to mark the node as ineligible for constructing a path along.
-	virtual bool ExcludeNode(PathNode node)
-	{
-		if (!node)	return true;
-
-		// Scale is the size requirements.
-		// STANDSTILL flag is used to require the actor to be bigger instead of smaller.
-		double r = node.Scale.X;
-		double h = node.Scale.Y;
-
-		if (r <= 0.0 && h <= 0.0)
-			return false;
-		
-		// Perfect fit.
-		if (radius == r && height == h)
-			return false; 
-
-		if ((r < radius) || (h < height))
-			return !node.bSTANDSTILL;
-		
-		return false;
 	}
 	
 	native bool TryMove(vector2 newpos, int dropoff, bool missilecheck = false, FCheckPosition tm = null);
@@ -1226,6 +1145,7 @@ class Actor : Thinker native
 	void A_Fall() { A_NoBlocking(); }
 	native void A_Look();
 	native void A_Chase(statelabel melee = '_a_chase_default', statelabel missile = '_a_chase_default', int flags = 0);
+	native void A_DoChase(State melee, State missile, int flags = 0);
 	native void A_VileChase();
 	native bool A_CheckForResurrection(State state = null, Sound snd = 0);
 	native void A_BossDeath();
@@ -1306,9 +1226,9 @@ class Actor : Thinker native
 	native void A_CustomMeleeAttack(int damage = 0, sound meleesound = "", sound misssound = "", name damagetype = "none", bool bleed = true);
 	native void A_CustomComboAttack(class<Actor> missiletype, double spawnheight, int damage, sound meleesound = "", name damagetype = "none", bool bleed = true);
 	native void A_Burst(class<Actor> chunktype);
-	native void A_RadiusDamageSelf(int damage = 128, double distance = 128, int flags = 0, class<Actor> flashtype = null);
-	native int GetRadiusDamage(Actor thing, int damage, int distance, int fulldmgdistance = 0, bool oldradiusdmg = false, bool circular = false);
-	native int RadiusAttack(Actor bombsource, int bombdamage, int bombdistance, Name bombmod = 'none', int flags = RADF_HURTSOURCE, int fulldamagedistance = 0, name species = "None");
+	native void A_RadiusDamageSelf(int damage = 128, double distance = 128.0, int flags = 0, class<Actor> flashtype = null);
+	native int GetRadiusDamage(Actor thing, int damage, double distance, double fulldmgdistance = 0.0, bool oldradiusdmg = false, bool circular = false);
+	native int RadiusAttack(Actor bombsource, int bombdamage, double bombdistance, Name bombmod = 'none', int flags = RADF_HURTSOURCE, double fulldamagedistance = 0.0, name species = "None");
 	
 	native void A_Respawn(int flags = 1);
 	native void A_RestoreSpecialPosition();
@@ -1328,8 +1248,8 @@ class Actor : Thinker native
 	deprecated("2.3", "User variables are deprecated in ZScript. Actor variables are directly accessible") native void A_SetUserArray(name varname, int index, int value);
 	deprecated("2.3", "User variables are deprecated in ZScript. Actor variables are directly accessible") native void A_SetUserVarFloat(name varname, double value);
 	deprecated("2.3", "User variables are deprecated in ZScript. Actor variables are directly accessible") native void A_SetUserArrayFloat(name varname, int index, double value);
-	native void A_Quake(double intensity, int duration, int damrad, int tremrad, sound sfx = "world/quake");
-	native void A_QuakeEx(double intensityX, double intensityY, double intensityZ, int duration, int damrad, int tremrad, sound sfx = "world/quake", int flags = 0, double mulWaveX = 1, double mulWaveY = 1, double mulWaveZ = 1, int falloff = 0, int highpoint = 0, double rollIntensity = 0, double rollWave = 0, double damageMultiplier = 1, double thrustMultiplier = 0.5, int damage = 0);
+	native void A_Quake(double intensity, int duration, double damrad, double tremrad, sound sfx = "world/quake");
+	native void A_QuakeEx(double intensityX, double intensityY, double intensityZ, int duration, double damrad, double tremrad, sound sfx = "world/quake", int flags = 0, double mulWaveX = 1, double mulWaveY = 1, double mulWaveZ = 1, double falloff = 0, int highpoint = 0, double rollIntensity = 0, double rollWave = 0, double damageMultiplier = 1, double thrustMultiplier = 0.5, int damage = 0);
 	action native void A_SetTics(int tics);
 	native void A_DamageSelf(int amount, name damagetype = "none", int flags = 0, class<Actor> filter = null, name species = "None", int src = AAPTR_DEFAULT, int inflict = AAPTR_DEFAULT);
 	native void A_DamageTarget(int amount, name damagetype = "none", int flags = 0, class<Actor> filter = null, name species = "None", int src = AAPTR_DEFAULT, int inflict = AAPTR_DEFAULT);

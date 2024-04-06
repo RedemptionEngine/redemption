@@ -592,7 +592,7 @@ bool	P_TeleportMove(AActor* thing, const DVector3 &pos, bool telefrag, bool modi
 			thing->CheckSectorTransition(oldsec);
 		}
 	}
-	thing->ClearPath();
+
 	return true;
 }
 
@@ -2521,8 +2521,8 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 
 
 	// Check for crossed portals
-	bool portalcrossed, nodecall;
-	nodecall = portalcrossed = false;
+	bool portalcrossed;
+	portalcrossed = false;
 
 	while (true)
 	{
@@ -2567,7 +2567,6 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 				thing->Prev += port->mDisplacement;
 				thing->LinkToWorld(&ctx);
 				P_FindFloorCeiling(thing);
-				thing->ClearPath();
 				portalcrossed = true;
 				tm.portalstep = false;
 				tm.pos += port->mDisplacement;
@@ -2597,8 +2596,7 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 				P_TranslatePortalVXVY(ld, thing->Vel.X, thing->Vel.Y);
 				P_TranslatePortalAngle(ld, thing->Angles.Yaw);
 				thing->LinkToWorld(&ctx);
-				P_FindFloorCeiling(thing); 
-				thing->ClearPath();
+				P_FindFloorCeiling(thing);
 				thing->ClearInterpolation();
 				portalcrossed = true;
 				tm.portalstep = false;
@@ -2756,7 +2754,7 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 		thing->Sector = thing->Level->PointInSector(thing->Pos());
 		thing->PrevPortalGroup = thing->Sector->PortalGroup;
 		thing->LinkToWorld(&ctx);
-		thing->ClearPath();
+
 		P_FindFloorCeiling(thing);
 	}
 
@@ -5936,7 +5934,7 @@ CUSTOM_CVAR(Float, splashfactor, 1.f, CVAR_SERVERINFO)
 // Used by anything without OLDRADIUSDMG flag
 //==========================================================================
 
-static double GetRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, int bombdamage, int bombdistance, int fulldamagedistance, bool thingbombsource, bool round)
+static double GetRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, int bombdamage, double bombdistance, double fulldamagedistance, bool thingbombsource, bool round)
 {
 	// [RH] New code. The bounding box only covers the
 	// height of the thing and not the height of the map.
@@ -5945,7 +5943,7 @@ static double GetRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, 
 	double dx, dy;
 	double boxradius;
 
-	double bombdistancefloat = 1. / (double)(bombdistance - fulldamagedistance);
+	double bombdistancefloat = 1.0 / (bombdistance - fulldamagedistance);
 	double bombdamagefloat = (double)bombdamage;
 
 	if (!round)
@@ -5992,8 +5990,8 @@ static double GetRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, 
 	{
 		len = bombspot->Distance3D (thing);
 	}
-	len = clamp<double>(len - (double)fulldamagedistance, 0, len);
-	points = bombdamagefloat * (1. - len * bombdistancefloat);
+	len = clamp<double>(len - fulldamagedistance, 0.0, len);
+	points = bombdamagefloat * (1.0 - len * bombdistancefloat);
 
 	// Calculate the splash and radius damage factor if called by P_RadiusAttack.
 	// Otherwise, just get the raw damage. This allows modders to manipulate it
@@ -6021,7 +6019,7 @@ static double GetRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, 
 // based on XY distance.
 //==========================================================================
 
-static int GetOldRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, int bombdamage, int bombdistance, int fulldamagedistance)
+static int GetOldRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, int bombdamage, double bombdistance, double fulldamagedistance)
 {
 	const int ret = fromaction ? 0 : -1; // -1 is specifically for P_RadiusAttack; continue onto another actor.
 	double dx, dy, dist;
@@ -6042,8 +6040,8 @@ static int GetOldRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, 
 	// When called from the action function, ignore the sight check.
 	if (fromaction || P_CheckSight(thing, bombspot, SF_IGNOREVISIBILITY | SF_IGNOREWATERBOUNDARY))
 	{
-		dist = clamp<double>(dist - fulldamagedistance, 0, dist);
-		int damage = Scale(bombdamage, bombdistance - int(dist), bombdistance);
+		dist = clamp<double>(dist - fulldamagedistance, 0.0, dist);
+		int damage = (int)Scale((double)bombdamage, bombdistance - dist, bombdistance);
 
 		if (!fromaction)
 		{
@@ -6065,7 +6063,7 @@ static int GetOldRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, 
 // damage and not taking into account any damage reduction.
 //==========================================================================
 
-int P_GetRadiusDamage(AActor *self, AActor *thing, int damage, int distance, int fulldmgdistance, bool oldradiusdmg, bool circular)
+int P_GetRadiusDamage(AActor *self, AActor *thing, int damage, double distance, double fulldmgdistance, bool oldradiusdmg, bool circular)
 {
 
 	if (!thing)
@@ -6077,10 +6075,10 @@ int P_GetRadiusDamage(AActor *self, AActor *thing, int damage, int distance, int
 		return damage;
 	}
 
-	fulldmgdistance = clamp<int>(fulldmgdistance, 0, distance - 1);
+	fulldmgdistance = clamp<double>(fulldmgdistance, 0.0, distance - 1.0);
 
 	// Mirroring A_Explode's behavior.
-	if (distance <= 0)
+	if (distance <= 0.0)
 		distance = damage;
 
 	const int newdam = oldradiusdmg
@@ -6097,15 +6095,15 @@ int P_GetRadiusDamage(AActor *self, AActor *thing, int damage, int distance, int
 //
 //==========================================================================
 
-int P_RadiusAttack(AActor *bombspot, AActor *bombsource, int bombdamage, int bombdistance, FName bombmod,
-	int flags, int fulldamagedistance, FName species)
+int P_RadiusAttack(AActor *bombspot, AActor *bombsource, int bombdamage, double bombdistance, FName bombmod,
+	int flags, double fulldamagedistance, FName species)
 {
-	if (bombdistance <= 0)
+	if (bombdistance <= 0.0)
 		return 0;
-	fulldamagedistance = clamp<int>(fulldamagedistance, 0, bombdistance - 1);
+	fulldamagedistance = clamp<double>(fulldamagedistance, 0.0, bombdistance - 1.0);
 
 	FPortalGroupArray grouplist(FPortalGroupArray::PGA_Full3d);
-	FMultiBlockThingsIterator it(grouplist, bombspot->Level, bombspot->X(), bombspot->Y(), bombspot->Z() - bombdistance, bombspot->Height + bombdistance*2, bombdistance, false, bombspot->Sector);
+	FMultiBlockThingsIterator it(grouplist, bombspot->Level, bombspot->X(), bombspot->Y(), bombspot->Z() - bombdistance, bombspot->Height + bombdistance*2.0, bombdistance, false, bombspot->Sector);
 	FMultiBlockThingsIterator::CheckResult cres;
 
 	if (flags & RADF_SOURCEISSPOT)

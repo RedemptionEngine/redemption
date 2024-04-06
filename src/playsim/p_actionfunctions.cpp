@@ -3322,8 +3322,8 @@ DEFINE_ACTION_FUNCTION(AActor, A_Quake)
 	PARAM_SELF_PROLOGUE(AActor);
 	PARAM_FLOAT		(intensity);
 	PARAM_INT		(duration);
-	PARAM_INT		(damrad);
-	PARAM_INT		(tremrad);
+	PARAM_FLOAT		(damrad);
+	PARAM_FLOAT		(tremrad);
 	PARAM_SOUND	(sound);
 
 	P_StartQuake(self->Level, self, 0, intensity, duration, damrad, tremrad, sound);
@@ -3345,14 +3345,14 @@ DEFINE_ACTION_FUNCTION(AActor, A_QuakeEx)
 	PARAM_FLOAT(intensityY);
 	PARAM_FLOAT(intensityZ);
 	PARAM_INT(duration);
-	PARAM_INT(damrad);
-	PARAM_INT(tremrad);
+	PARAM_FLOAT(damrad);
+	PARAM_FLOAT(tremrad);
 	PARAM_SOUND(sound);
 	PARAM_INT(flags);
 	PARAM_FLOAT(mulWaveX);
 	PARAM_FLOAT(mulWaveY);
 	PARAM_FLOAT(mulWaveZ);
-	PARAM_INT(falloff);
+	PARAM_FLOAT(falloff);
 	PARAM_INT(highpoint);
 	PARAM_FLOAT(rollIntensity);
 	PARAM_FLOAT(rollWave);
@@ -5165,7 +5165,7 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 	if(animStart == FErr_NotFound)
 	{
 		self->modelData->curAnim.flags = ANIMOVERRIDE_NONE;
-		Printf("Could not find animation %s", animName.GetChars());
+		Printf("Could not find animation %s\n", animName.GetChars());
 		return;
 	}
 	int animEnd = mdl->FindLastFrame(animName);
@@ -5180,13 +5180,13 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 	if(startFrame >= len)
 	{
 		self->modelData->curAnim.flags = ANIMOVERRIDE_NONE;
-		Printf("frame %d is past the end of animation %s", startFrame, animName.GetChars());
+		Printf("frame %d is past the end of animation %s\n", startFrame, animName.GetChars());
 		return;
 	}
 	else if(loopFrame >= len)
 	{
 		self->modelData->curAnim.flags = ANIMOVERRIDE_NONE;
-		Printf("frame %d is past the end of animation %s", startFrame, animName.GetChars());
+		Printf("frame %d is past the end of animation %s\n", startFrame, animName.GetChars());
 		return;
 	}
 	
@@ -5330,7 +5330,7 @@ void ChangeModelNative(
 
 	if (n_modeldef != NAME_None && (modeldef = PClass::FindActor(n_modeldef.GetChars())) == nullptr)
 	{
-		Printf("Attempt to pass invalid modeldef name %s in %s.", n_modeldef.GetChars(), self->GetCharacterName());
+		Printf("Attempt to pass invalid modeldef name %s in %s.\n", n_modeldef.GetChars(), self->GetCharacterName());
 		return;
 	}
 
@@ -5436,57 +5436,6 @@ void ChangeModelNative(
 		{
 			mobj->modelData->skinIDs[skinindex] = skindata;
 		}
-	}
-
-	//[SM] - We need to serialize file paths and model names so that they are pushed on loading save files. Likewise, let's not include models that were already parsed when initialized.
-	if (queryModel >= 0)
-	{
-		FString fullName;
-		fullName.Format("%s%s", modelpath.GetChars(), model.GetChars());
-		bool found = false;
-
-		for (auto &m : savedModelFiles) 
-		{
-			if(m.CompareNoCase(fullName) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		if(!found) for (auto &m : Models)
-		{
-			if (m->mFileName.CompareNoCase(fullName) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		if(!found) savedModelFiles.Push(fullName);
-	}
-	//Same for animations
-	if (queryAnimation >= 0)
-	{
-		FString fullName;
-		fullName.Format("%s%s", animationpath.GetChars(), animation.GetChars());
-		bool found = false;
-
-		for (auto &m : savedModelFiles) 
-		{
-			if(m.CompareNoCase(fullName) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		if(!found) for (auto &m : Models)
-		{
-			if (m->mFileName.CompareNoCase(fullName) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		if(!found) savedModelFiles.Push(fullName);
 	}
 
 	CleanupModelData(mobj);
