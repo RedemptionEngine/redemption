@@ -154,7 +154,7 @@ class PlayerPawn : Actor
 			if (health > 0) Height = FullHeight;
 		}
 
-		if (player && bWeaponLevel2Ended)
+		if (player && bWeaponLevel2Ended && !(player.cheats & CF_PREDICTING))
 		{
 			bWeaponLevel2Ended = false;
 			if (player.ReadyWeapon != NULL && player.ReadyWeapon.bPowered_Up)
@@ -179,6 +179,9 @@ class PlayerPawn : Actor
 
 	override void BeginPlay()
 	{
+		// Force create this since players can predict.
+		SetViewPos((0.0, 0.0, 0.0));
+
 		Super.BeginPlay ();
 		ChangeStatNum (STAT_PLAYER);
 		FullHeight = Height;

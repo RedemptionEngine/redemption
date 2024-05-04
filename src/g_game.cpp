@@ -1425,7 +1425,7 @@ void FLevelLocals::PlayerReborn (int player)
 	p->oldbuttons = ~0, p->attackdown = true; p->usedown = true;	// don't do anything immediately
 	p->original_oldbuttons = ~0;
 	p->playerstate = PST_LIVE;
-	NetworkEntityManager::SetClientNetworkEntity(p);
+	NetworkEntityManager::SetClientNetworkEntity(p->mo, p - players);
 
 	if (gamestate != GS_TITLELEVEL)
 	{
@@ -3082,7 +3082,7 @@ bool G_CheckDemoStatus (void)
 			const size_t size = demo_p - demobuffer;
 			saved = fw->Write(demobuffer, size) == size;
 			delete fw;
-			if (!saved) remove(demoname.GetChars());
+			if (!saved) RemoveFile(demoname.GetChars());
 		}
 		M_Free (demobuffer); 
 		demorecording = false;
