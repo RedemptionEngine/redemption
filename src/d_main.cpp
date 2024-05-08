@@ -1,4 +1,5 @@
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 // Copyright 1993-1996 id Software
 // Copyright 1999-2016 Randy Heit
 // Copyright 2002-2016 Christoph Oelckers
@@ -291,7 +292,7 @@ CUSTOM_CVAR (Int, fraglimit, 0, CVAR_SERVERINFO)
 		{
 			if (playeringame[i] && self <= D_GetFragCount(&players[i]))
 			{
-				Printf ("%s\n", GStrings("TXT_FRAGLIMIT"));
+				Printf ("%s\n", GStrings.GetString("TXT_FRAGLIMIT"));
 				primaryLevel->ExitLevel (0, false);
 				break;
 			}
@@ -616,6 +617,7 @@ CVAR(Flag, sv_nolocaldrops, dmflags3, DF3_NO_LOCAL_DROPS);
 CVAR(Flag, sv_nocoopitems, dmflags3, DF3_NO_COOP_ONLY_ITEMS);
 CVAR(Flag, sv_nocoopthings, dmflags3, DF3_NO_COOP_ONLY_THINGS);
 CVAR(Flag, sv_rememberlastweapon, dmflags3, DF3_REMEMBER_LAST_WEAP);
+CVAR(Flag, sv_pistolstart, dmflags3, DF3_PISTOL_START);
 
 //==========================================================================
 //
@@ -696,6 +698,19 @@ CUSTOM_CVAR(Int, compatmode, 0, CVAR_ARCHIVE|CVAR_NOINITCALL)
 			COMPATF_TRACE | COMPATF_HITSCAN | COMPATF_MISSILECLIP | COMPATF_MASKEDMIDTEX | COMPATF_SOUNDTARGET;
 		w = COMPATF2_POINTONLINE | COMPATF2_EXPLODE1 | COMPATF2_EXPLODE2 | COMPATF2_AVOID_HAZARDS | COMPATF2_STAYONLIFT | COMPATF2_NOMBF21;
 		break;
+
+	case 8: // MBF21 compat mode
+		v = COMPATF_TRACE | COMPATF_SOUNDTARGET | COMPATF_BOOMSCROLL | COMPATF_MISSILECLIP | COMPATF_CROSSDROPOFF |
+			COMPATF_MUSHROOM | COMPATF_MBFMONSTERMOVE | COMPATF_NOBLOCKFRIENDS | COMPATF_MASKEDMIDTEX;
+		w = COMPATF2_EXPLODE1 | COMPATF2_AVOID_HAZARDS | COMPATF2_STAYONLIFT;
+		break;
+
+	case 9: // Stricter MBF21 compatibility
+		v = COMPATF_NOBLOCKFRIENDS | COMPATF_MBFMONSTERMOVE | COMPATF_INVISIBILITY |
+			COMPATF_NOTOSSDROPS | COMPATF_MUSHROOM | COMPATF_NO_PASSMOBJ | COMPATF_BOOMSCROLL | COMPATF_WALLRUN |
+			COMPATF_TRACE | COMPATF_HITSCAN | COMPATF_MISSILECLIP | COMPATF_CROSSDROPOFF | COMPATF_MASKEDMIDTEX | COMPATF_SOUNDTARGET;
+		w = COMPATF2_POINTONLINE | COMPATF2_EXPLODE1 | COMPATF2_EXPLODE2 | COMPATF2_AVOID_HAZARDS | COMPATF2_STAYONLIFT;
+		break;
 	}
 	compatflags = v;
 	compatflags2 = w;
@@ -747,6 +762,8 @@ CVAR (Flag, compat_railing,				compatflags2, COMPATF2_RAILING);
 CVAR (Flag, compat_avoidhazard,			compatflags2, COMPATF2_AVOID_HAZARDS);
 CVAR (Flag, compat_stayonlift,			compatflags2, COMPATF2_STAYONLIFT);
 CVAR (Flag, compat_nombf21,				compatflags2, COMPATF2_NOMBF21);
+CVAR (Flag, compat_voodoozombies,		compatflags2, COMPATF2_VOODOO_ZOMBIES);
+CVAR (Flag, compat_fdteleport,			compatflags2, COMPATF2_FDTELEPORT);
 
 CVAR(Bool, vid_activeinbackground, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
@@ -1132,7 +1149,7 @@ void D_Display ()
 				if (paused && multiplayer)
 				{
 					FFont *font = generic_ui? NewSmallFont : SmallFont;
-					FString pstring = GStrings("TXT_BY");
+					FString pstring = GStrings.GetString("TXT_BY");
 					pstring.Substitute("%s", players[paused - 1].userinfo.GetName());
 					DrawText(twod, font, CR_RED,
 						(twod->GetWidth() - font->StringWidth(pstring)*CleanXfac) / 2,
@@ -1232,6 +1249,8 @@ void D_DoomLoop ()
 	{
 		try
 		{
+			GStrings.SetDefaultGender(players[consoleplayer].userinfo.GetGender()); // cannot be done when the CVAR changes because we don't know if it's for the consoleplayer.
+
 			// frame syncronous IO operations
 			if (gametic > lasttic)
 			{
@@ -1330,7 +1349,7 @@ void D_PageDrawer (void)
 	if (Subtitle != nullptr)
 	{
 		FFont* font = generic_ui ? NewSmallFont : SmallFont;
-		DrawFullscreenSubtitle(font, GStrings[Subtitle]);
+		DrawFullscreenSubtitle(font, GStrings.CheckString(Subtitle));
 	}
 	if (Advisory.isValid())
 	{
@@ -1826,7 +1845,9 @@ static void GetCmdLineFiles(std::vector<std::string>& wadfiles)
 	int i, argc;
 
 	argc = Args->CheckParmList("-file", &args);
-	for (i = 0; i < argc; ++i)
+
+	// [RL0] Check for array size to only add new wads
+	for (i = wadfiles.size(); i < argc; ++i)
 	{
 		D_AddWildFile(wadfiles, args[i].GetChars(), ".wad", GameConfig);
 	}
@@ -2197,7 +2218,7 @@ static void CheckCmdLine()
 
 	if (devparm)
 	{
-		Printf ("%s", GStrings("D_DEVSTR"));
+		Printf ("%s", GStrings.GetString("D_DEVSTR"));
 	}
 
 	// turbo option  // [RH] (now a cvar)
@@ -2672,11 +2693,6 @@ void Mlook_ReleaseHandler()
 	{
 		Net_WriteInt8(DEM_CENTERVIEW);
 	}
-}
-
-int StrTable_GetGender()
-{
-	return players[consoleplayer].userinfo.GetGender();
 }
 
 bool StrTable_ValidFilter(const char* str)
@@ -3491,7 +3507,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		for (int p = 0; p < 5; ++p)
 		{
 			// At this point we cannot use the player's gender info yet so force 'male' here.
-			const char *str = GStrings.GetString(startupString[p], nullptr, 0);
+			const char *str = GStrings.CheckString(startupString[p], nullptr, 0);
 			if (str != NULL && str[0] != '\0')
 			{
 				Printf("%s\n", str);
@@ -3655,6 +3671,7 @@ static int D_DoomMain_Internal (void)
 	const char *wad;
 	FIWadManager *iwad_man;
 
+	NetworkEntityManager::NetIDStart = MAXPLAYERS + 1;
 	GC::AddMarkerFunc(GC_MarkGameRoots);
 	VM_CastSpriteIDToString = Doom_CastSpriteIDToString;
 
@@ -3682,7 +3699,6 @@ static int D_DoomMain_Internal (void)
 		System_GetPlayerName,
 		System_DispatchEvent,
 		StrTable_ValidFilter,
-		StrTable_GetGender,
 		nullptr,
 		CheckSkipGameOptionBlock,
 		System_ConsoleToggled,
@@ -3786,6 +3802,9 @@ static int D_DoomMain_Internal (void)
 		std::vector<std::string> allwads;
 		
 		const FIWADInfo *iwad_info = iwad_man->FindIWAD(allwads, iwad.GetChars(), basewad.GetChars(), optionalwad.GetChars());
+
+		GetCmdLineFiles(pwads); // [RL0] Update with files passed on the launcher extra args
+
 		if (!iwad_info) return 0;	// user exited the selection popup via cancel button.
 		if ((iwad_info->flags & GI_SHAREWARE) && pwads.size() > 0)
 		{

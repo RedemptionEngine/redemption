@@ -100,8 +100,8 @@
 #include "a_dynlight.h"
 #include "fragglescript/t_fs.h"
 #include "shadowinlines.h"
-#include "d_net.h"
 #include "model.h"
+#include "d_net.h"
 
 // MACROS ------------------------------------------------------------------
 
@@ -393,7 +393,13 @@ void AActor::Serialize(FSerializer &arc)
 		A("userlights", UserLights)
 		A("WorldOffset", WorldOffset)
 		("modelData", modelData)
-		A("LandingSpeed", LandingSpeed);
+		A("LandingSpeed", LandingSpeed)
+
+		("unmorphtime", UnmorphTime)
+		("morphflags", MorphFlags)
+		("premorphproperties", PremorphProperties)
+		("morphexitflash", MorphExitFlash);
+
 
 		SerializeTerrain(arc, "floorterrain", floorterrain, &def->floorterrain);
 		SerializeArgs(arc, "args", args, def->args, special);
@@ -3656,10 +3662,6 @@ void AActor::SetViewAngle(DAngle ang, int fflags)
 
 double AActor::GetFOV(double ticFrac)
 {
-	// [B] Disable interpolation when playing online, otherwise it gets vomit inducing
-	if (netgame)
-		return player ? player->FOV : CameraFOV;
-
 	double fov;
 	if (player)
 	{
@@ -5378,6 +5380,10 @@ int MorphPointerSubstitution(AActor* from, AActor* to)
 	{
 		to->player = from->player;
 		from->player = nullptr;
+
+		// Swap the new body into the right network slot if it's a client (this doesn't
+		// really matter for regular Actors since they grab any ID they can get anyway).
+		NetworkEntityManager::SetClientNetworkEntity(to, to->player - players);
 	}
 
 	if (from->alternative != nullptr)
@@ -7694,7 +7700,7 @@ const char *AActor::GetTag(const char *def) const
 		const char *tag = Tag->GetChars();
 		if (tag[0] == '$')
 		{
-			return GStrings(tag + 1);
+			return GStrings.GetString(tag + 1);
 		}
 		else
 		{
@@ -7724,7 +7730,7 @@ const char *AActor::GetCharacterName() const
 		const char *cname = Conversation->SpeakerName.GetChars();
 		if (cname[0] == '$')
 		{
-			return GStrings(cname + 1);
+			return GStrings.GetString(cname + 1);
 		}
 		else return cname;
 	}

@@ -375,6 +375,7 @@ enum ESetAnimationFlags
 {
 	SAF_INSTANT = 1 << 0,
 	SAF_LOOP = 1 << 1,
+	SAF_NOOVERRIDE = 1 << 2,
 };
 
 // Change model flags
@@ -713,6 +714,7 @@ enum EParticleFlags
 	SPF_REPLACE					= 1 << 7,
 	SPF_NO_XY_BILLBOARD			= 1 << 8,
 	SPF_LOCAL_ANIM				= 1 << 9,
+	SPF_NEGATIVE_FADESTEP		= 1 << 10,
 
 	SPF_RELATIVE				= SPF_RELPOS|SPF_RELVEL|SPF_RELACCEL|SPF_RELANG
 };
