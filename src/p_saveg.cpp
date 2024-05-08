@@ -660,7 +660,7 @@ void FLevelLocals::SerializePlayers(FSerializer &arc, bool skipload)
 				for (unsigned int i = 0u; i < MAXPLAYERS; ++i)
 				{
 					if (PlayerInGame(i) && Players[i]->mo != nullptr)
-						NetworkEntityManager::SetClientNetworkEntity(Players[i]);
+						NetworkEntityManager::SetClientNetworkEntity(Players[i]->mo, i);
 				}
 			}
 		}
@@ -1014,8 +1014,7 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 		("scrolls", Scrolls)
 		("automap", automap)
 		("interpolator", interpolator)
-		("frozenstate", frozenstate)
-		("savedModelFiles", savedModelFiles);
+		("frozenstate", frozenstate);
 
 
 	// Hub transitions must keep the current total time

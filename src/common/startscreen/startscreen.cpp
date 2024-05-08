@@ -607,7 +607,7 @@ bool FStartScreen::NetInit(const char* message, int numplayers)
 {
 	NetMaxPos = numplayers;
 	NetCurPos = 0;
-	NetMessageString.Format("%s %s", message, GStrings("TXT_NET_PRESSESC"));
+	NetMessageString.Format("%s %s", message, GStrings.GetString("TXT_NET_PRESSESC"));
 	NetProgress(1);	// You always know about yourself
 	return true;
 }
@@ -654,13 +654,11 @@ void FStartScreen::NetProgress(int count)
 
 void FStartScreen::Render(bool force)
 {
+	static uint64_t minwaittime = 30;
+
 	auto nowtime = I_msTime();
 	// Do not refresh too often. This function gets called a lot more frequently than the screen can update.
-#ifdef _DEBUG
-	if (nowtime - screen->FrameTime > 3000 || force)
-#else
-	if (nowtime - screen->FrameTime > 30 || force)
-#endif
+	if (nowtime - screen->FrameTime > minwaittime || force)
 	{
 		screen->FrameTime = nowtime;
 		screen->FrameTimeNS = I_nsTime();
@@ -694,6 +692,9 @@ void FStartScreen::Render(bool force)
 		screen->Update();
 		twod->OnFrameDone();
 	}
+	auto newtime = I_msTime();
+	if ((newtime - nowtime) * 2.0 > minwaittime) // slow down drawing the start screen if we're on a slow GPU!
+		minwaittime = (newtime - nowtime) * 2.0;
 }
 
 FImageSource* CreateStartScreenTexture(FBitmap& srcdata);

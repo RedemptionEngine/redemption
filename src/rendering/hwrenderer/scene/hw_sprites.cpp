@@ -406,6 +406,8 @@ void HandleSpriteOffsets(Matrix3x4 *mat, const FRotator *HW, FVector2 *offset, b
 
 bool HWSprite::CalculateVertices(HWDrawInfo* di, FVector3* v, DVector3* vp)
 {
+	float pixelstretch = di->Level->pixelstretch;
+
 	FVector3 center = FVector3((x1 + x2) * 0.5, (y1 + y2) * 0.5, (z1 + z2) * 0.5);
 	const auto& HWAngles = di->Viewpoint.HWAngles;
 	Matrix3x4 mat;
@@ -466,21 +468,15 @@ bool HWSprite::CalculateVertices(HWDrawInfo* di, FVector3* v, DVector3* vp)
 	const bool useOffsets = (actor != nullptr) && !(actor->renderflags & RF_ROLLCENTER);
 
 	FVector2 offset = FVector2( offx, offy );
-
-	// Account for +ROLLCENTER flag. Takes the embedded image offsets and adds them in with SpriteOffsets.
-	if (drawRollSpriteActor && useOffsets)
-	{
-		offset.X += center.X - x;
-		offset.Y += center.Z - z;
-	}
-
+	float xx = -center.X + x;
+	float yy = -center.Y + y;
+	float zz = -center.Z + z;
 	// [Nash] check for special sprite drawing modes
 	if (drawWithXYBillboard || isWallSprite)
 	{
-		// Compute center of sprite
 		mat.MakeIdentity();
 		mat.Translate(center.X, center.Z, center.Y); // move to sprite center
-
+		mat.Scale(1.0, 1.0/pixelstretch, 1.0);	// unstretch sprite by level aspect ratio
 
 		// [MC] Sprite offsets.
 		if (!offset.isZero())
@@ -512,16 +508,21 @@ bool HWSprite::CalculateVertices(HWDrawInfo* di, FVector3* v, DVector3* vp)
 			mat.Rotate(0, 1, 0, 0);
 			if (drawRollSpriteActor)
 			{
+
+				if (useOffsets) mat.Translate(xx, zz, yy);
 				mat.Rotate(yawvecX, 0, yawvecY, rollDegrees);
+				if (useOffsets) mat.Translate(-xx, -zz, -yy);
 			}
 		}
 		else if (doRoll)
 		{
+			if (useOffsets) mat.Translate(xx, zz, yy);
 			if (drawWithXYBillboard)
 			{
 				mat.Rotate(-sin(angleRad), 0, cos(angleRad), -HWAngles.Pitch.Degrees());
 			}
 			mat.Rotate(cos(angleRad), 0, sin(angleRad), rollDegrees);
+			if (useOffsets) mat.Translate(-xx, -zz, -yy);
 		}
 		else if (drawWithXYBillboard)
 		{
@@ -531,6 +532,7 @@ bool HWSprite::CalculateVertices(HWDrawInfo* di, FVector3* v, DVector3* vp)
 			mat.Rotate(-sin(angleRad), 0, cos(angleRad), -HWAngles.Pitch.Degrees());
 		}
 
+		mat.Scale(1.0, pixelstretch, 1.0);	// stretch sprite by level aspect ratio
 		mat.Translate(-center.X, -center.Z, -center.Y); // retreat from sprite center
 
 		v[0] = mat * FVector3(x1, z1, y1);
@@ -554,7 +556,11 @@ bool HWSprite::CalculateVertices(HWDrawInfo* di, FVector3* v, DVector3* vp)
 				float rollDegrees = Angles.Roll.Degrees();
 
 				mat.Translate(center.X, center.Z, center.Y);
+				mat.Scale(1.0, 1.0/pixelstretch, 1.0);	// unstretch sprite by level aspect ratio
+				if (useOffsets) mat.Translate(xx, zz, yy);
 				mat.Rotate(cos(angleRad), 0, sin(angleRad), rollDegrees);
+				if (useOffsets) mat.Translate(-xx, -zz, -yy);
+				mat.Scale(1.0, pixelstretch, 1.0);	// stretch sprite by level aspect ratio
 				mat.Translate(-center.X, -center.Z, -center.Y);
 			}
 
@@ -1053,6 +1059,13 @@ void HWSprite::Process(HWDrawInfo *di, FRenderState& state, AActor* thing, secto
 
 		r.Scale(sprscale.X, isSpriteShadow ? sprscale.Y * 0.15 : sprscale.Y);
 
+		if (thing->renderflags & (RF_ROLLSPRITE|RF_FLATSPRITE))
+		{
+			double ps = di->Level->pixelstretch;
+			double mult = 2 * ps / (ps * ps + 1); // shrink slightly
+			r.Scale(mult * ps, mult);
+		}
+
 		float rightfac = -r.left;
 		float leftfac = rightfac - r.width;
 		z1 = z - r.top;
@@ -1484,7 +1497,11 @@ void HWSprite::ProcessParticle(HWDrawInfo *di, FRenderState& state, particle_t *
 		else factor = 1 / 7.f;
 		float scalefac=particle->size * factor;
 
-		float viewvecX = vp.ViewVector.X * scalefac;
+		float ps = di->Level->pixelstretch;
+
+		scalefac *= 2 * ps / (ps * ps + 1); // shrink it slightly to account for the stretch
+
+		float viewvecX = vp.ViewVector.X * scalefac * ps;
 		float viewvecY = vp.ViewVector.Y * scalefac;
 
 		x1=x+viewvecY;
@@ -1553,6 +1570,13 @@ void HWSprite::AdjustVisualThinker(HWDrawInfo* di, DVisualThinker* spr, sector_t
 
 	auto r = spi.GetSpriteRect();
 	r.Scale(spr->Scale.X, spr->Scale.Y);
+
+	if (spr->PT.flags & SPF_ROLL)
+	{
+		double ps = di->Level->pixelstretch;
+		double mult = 2 * ps / (ps * ps + 1); // shrink slightly
+		r.Scale(mult * ps, mult);
+	}
 
 	if (spr->bXFlip)	
 	{

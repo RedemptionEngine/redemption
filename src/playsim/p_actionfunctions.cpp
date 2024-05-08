@@ -1292,7 +1292,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_Print)
 	PARAM_FLOAT	(time);
 	PARAM_NAME	(fontname);
 
-	if (text[0] == '$') text = GStrings(&text[1]);
+	if (text[0] == '$') text = GStrings.GetString(&text[1]);
 	if (self->CheckLocalView() ||
 		(self->target != NULL && self->target->CheckLocalView()))
 	{
@@ -1330,7 +1330,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_PrintBold)
 	float saved = con_midtime;
 	FFont *font = NULL;
 	
-	if (text[0] == '$') text = GStrings(&text[1]);
+	if (text[0] == '$') text = GStrings.GetString(&text[1]);
 	if (fontname != NAME_None)
 	{
 		font = V_GetFont(fontname.GetChars());
@@ -1359,7 +1359,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_Log)
 
 	if (local && !self->CheckLocalView()) return 0;
 
-	if (text[0] == '$') text = GStrings(&text[1]);
+	if (text[0] == '$') text = GStrings.GetString(&text[1]);
 	FString formatted = strbin1(text.GetChars());
 	Printf("%s\n", formatted.GetChars());
 	return 0;
@@ -3322,8 +3322,8 @@ DEFINE_ACTION_FUNCTION(AActor, A_Quake)
 	PARAM_SELF_PROLOGUE(AActor);
 	PARAM_FLOAT		(intensity);
 	PARAM_INT		(duration);
-	PARAM_INT		(damrad);
-	PARAM_INT		(tremrad);
+	PARAM_FLOAT		(damrad);
+	PARAM_FLOAT		(tremrad);
 	PARAM_SOUND	(sound);
 
 	P_StartQuake(self->Level, self, 0, intensity, duration, damrad, tremrad, sound);
@@ -3345,14 +3345,14 @@ DEFINE_ACTION_FUNCTION(AActor, A_QuakeEx)
 	PARAM_FLOAT(intensityY);
 	PARAM_FLOAT(intensityZ);
 	PARAM_INT(duration);
-	PARAM_INT(damrad);
-	PARAM_INT(tremrad);
+	PARAM_FLOAT(damrad);
+	PARAM_FLOAT(tremrad);
 	PARAM_SOUND(sound);
 	PARAM_INT(flags);
 	PARAM_FLOAT(mulWaveX);
 	PARAM_FLOAT(mulWaveY);
 	PARAM_FLOAT(mulWaveZ);
-	PARAM_INT(falloff);
+	PARAM_FLOAT(falloff);
 	PARAM_INT(highpoint);
 	PARAM_FLOAT(rollIntensity);
 	PARAM_FLOAT(rollWave);
@@ -5125,17 +5125,23 @@ enum ESetAnimationFlags
 {
 	SAF_INSTANT = 1 << 0,
 	SAF_LOOP = 1 << 1,
-	SAF_USEACTORROLL = 1 << 2,
-	SAF_USEACTORPITCH = 1 << 3,
+	SAF_NOOVERRIDE = 1 << 2,
 };
 
-void SetAnimationInternal(AActor * self, FName animName, double framerate, int startFrame, int loopFrame, int interpolateTics, int flags, double ticFrac)
+extern double getCurrentFrame(const AnimOverride &anim, double tic);
+
+void SetAnimationInternal(AActor * self, FName animName, double framerate, int startFrame, int loopFrame, int endFrame, int interpolateTics, int flags, double ticFrac)
 {
 	if(!self) ThrowAbortException(X_READ_NIL, "In function parameter self");
 
 	if(!(self->flags9 & MF9_DECOUPLEDANIMATIONS))
 	{
 		ThrowAbortException(X_OTHER, "Cannot set animation for non-decoupled actors");
+	}
+
+	if(!BaseSpriteModelFrames.CheckKey(self->GetClass()))
+	{
+		ThrowAbortException(X_OTHER, "Actor class is missing a MODELDEF definition or a MODELDEF BaseFrame");
 	}
 
 	if(interpolateTics <= 0) interpolateTics = 1;
@@ -5146,11 +5152,6 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 	{
 		self->modelData->curAnim.flags = ANIMOVERRIDE_NONE;
 		return;
-	}
-
-	if(!(flags & SAF_INSTANT))
-	{
-		self->modelData->prevAnim = self->modelData->curAnim;
 	}
 
 	double tic = self->Level->totaltime;
@@ -5165,9 +5166,21 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 	if(animStart == FErr_NotFound)
 	{
 		self->modelData->curAnim.flags = ANIMOVERRIDE_NONE;
-		Printf("Could not find animation %s", animName.GetChars());
+		Printf("Could not find animation %s\n", animName.GetChars());
 		return;
 	}
+
+	if((flags & SAF_NOOVERRIDE) && self->modelData->curAnim.flags != ANIMOVERRIDE_NONE && self->modelData->curAnim.firstFrame == animStart)
+	{
+		//same animation as current, skip setting it
+		return;
+	}
+
+	if(!(flags & SAF_INSTANT))
+	{
+		self->modelData->prevAnim = self->modelData->curAnim;
+	}
+
 	int animEnd = mdl->FindLastFrame(animName);
 
 	if(framerate < 0)
@@ -5180,18 +5193,24 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 	if(startFrame >= len)
 	{
 		self->modelData->curAnim.flags = ANIMOVERRIDE_NONE;
-		Printf("frame %d is past the end of animation %s", startFrame, animName.GetChars());
+		Printf("frame %d (startFrame) is past the end of animation %s\n", startFrame, animName.GetChars());
 		return;
 	}
 	else if(loopFrame >= len)
 	{
 		self->modelData->curAnim.flags = ANIMOVERRIDE_NONE;
-		Printf("frame %d is past the end of animation %s", startFrame, animName.GetChars());
+		Printf("frame %d (loopFrame) is past the end of animation %s\n", startFrame, animName.GetChars());
+		return;
+	}
+	else if(endFrame >= len)
+	{
+		self->modelData->curAnim.flags = ANIMOVERRIDE_NONE;
+		Printf("frame %d (endFrame) is past the end of animation %s\n", endFrame, animName.GetChars());
 		return;
 	}
 	
 	self->modelData->curAnim.firstFrame = animStart;
-	self->modelData->curAnim.lastFrame = animEnd - 1;
+	self->modelData->curAnim.lastFrame = endFrame < 0 ? animEnd - 1 : animStart + endFrame;
 	self->modelData->curAnim.startFrame = startFrame < 0 ? animStart : animStart + startFrame;
 	self->modelData->curAnim.loopFrame = loopFrame < 0 ? animStart : animStart + loopFrame;
 	self->modelData->curAnim.flags = (flags&SAF_LOOP) ? ANIMOVERRIDE_LOOP : 0;
@@ -5200,6 +5219,8 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 
 	if(!(flags & SAF_INSTANT))
 	{
+		self->modelData->prevAnim.startFrame = getCurrentFrame(self->modelData->prevAnim, tic);
+		
 		self->modelData->curAnim.startTic = floor(tic) + interpolateTics;
 	}
 	else
@@ -5208,17 +5229,15 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 	}
 }
 
-void SetAnimationNative(AActor * self, int i_animName, double framerate, int startFrame, int loopFrame, int interpolateTics, int flags)
+void SetAnimationNative(AActor * self, int i_animName, double framerate, int startFrame, int loopFrame, int endFrame, int interpolateTics, int flags)
 {
-	SetAnimationInternal(self, FName(ENamedName(i_animName)), framerate, startFrame, loopFrame, interpolateTics, flags, 1);
+	SetAnimationInternal(self, FName(ENamedName(i_animName)), framerate, startFrame, loopFrame, endFrame, interpolateTics, flags, 1);
 }
 
-void SetAnimationUINative(AActor * self, int i_animName, double framerate, int startFrame, int loopFrame, int interpolateTics, int flags)
+void SetAnimationUINative(AActor * self, int i_animName, double framerate, int startFrame, int loopFrame, int endFrame, int interpolateTics, int flags)
 {
-	SetAnimationInternal(self, FName(ENamedName(i_animName)), framerate, startFrame, loopFrame, interpolateTics, flags, I_GetTimeFrac());
+	SetAnimationInternal(self, FName(ENamedName(i_animName)), framerate, startFrame, loopFrame, endFrame, interpolateTics, flags, I_GetTimeFrac());
 }
-
-extern double getCurrentFrame(const AnimOverride &anim, double tic);
 
 void SetAnimationFrameRateInternal(AActor * self, double framerate, double ticFrac)
 {
@@ -5239,16 +5258,16 @@ void SetAnimationFrameRateInternal(AActor * self, double framerate, double ticFr
 	}
 
 
-	if(self->modelData->curAnim.startTic < ticFrac)
-	{
-		self->modelData->curAnim.framerate = (float)framerate;
-		return;
-	}
-
 	double tic = self->Level->totaltime;
 	if ((ConsoleState == c_up || ConsoleState == c_rising) && (menuactive == MENU_Off || menuactive == MENU_OnNoPause) && !self->Level->isFrozen())
 	{
 		tic += ticFrac;
+	}
+
+	if(self->modelData->curAnim.startTic >= tic)
+	{
+		self->modelData->curAnim.framerate = (float)framerate;
+		return;
 	}
 
 	double frame = getCurrentFrame(self->modelData->curAnim, tic);
@@ -5330,7 +5349,7 @@ void ChangeModelNative(
 
 	if (n_modeldef != NAME_None && (modeldef = PClass::FindActor(n_modeldef.GetChars())) == nullptr)
 	{
-		Printf("Attempt to pass invalid modeldef name %s in %s.", n_modeldef.GetChars(), self->GetCharacterName());
+		Printf("Attempt to pass invalid modeldef name %s in %s.\n", n_modeldef.GetChars(), self->GetCharacterName());
 		return;
 	}
 
@@ -5438,57 +5457,6 @@ void ChangeModelNative(
 		}
 	}
 
-	//[SM] - We need to serialize file paths and model names so that they are pushed on loading save files. Likewise, let's not include models that were already parsed when initialized.
-	if (queryModel >= 0)
-	{
-		FString fullName;
-		fullName.Format("%s%s", modelpath.GetChars(), model.GetChars());
-		bool found = false;
-
-		for (auto &m : savedModelFiles) 
-		{
-			if(m.CompareNoCase(fullName) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		if(!found) for (auto &m : Models)
-		{
-			if (m->mFileName.CompareNoCase(fullName) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		if(!found) savedModelFiles.Push(fullName);
-	}
-	//Same for animations
-	if (queryAnimation >= 0)
-	{
-		FString fullName;
-		fullName.Format("%s%s", animationpath.GetChars(), animation.GetChars());
-		bool found = false;
-
-		for (auto &m : savedModelFiles) 
-		{
-			if(m.CompareNoCase(fullName) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		if(!found) for (auto &m : Models)
-		{
-			if (m->mFileName.CompareNoCase(fullName) == 0)
-			{
-				found = true;
-				break;
-			}
-		}
-		if(!found) savedModelFiles.Push(fullName);
-	}
-
 	CleanupModelData(mobj);
 
 	return;
@@ -5522,10 +5490,11 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, SetAnimation, SetAnimationNative)
 	PARAM_FLOAT(framerate);
 	PARAM_INT(startFrame);
 	PARAM_INT(loopFrame);
+	PARAM_INT(endFrame);
 	PARAM_INT(interpolateTics);
 	PARAM_INT(flags);
 	
-	SetAnimationInternal(self, animName, framerate, startFrame, loopFrame, interpolateTics, flags, 1);
+	SetAnimationInternal(self, animName, framerate, startFrame, loopFrame, endFrame, interpolateTics, flags, 1);
 
 	return 0;
 }
@@ -5537,10 +5506,11 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, SetAnimationUI, SetAnimationUINative)
 	PARAM_FLOAT(framerate);
 	PARAM_INT(startFrame);
 	PARAM_INT(loopFrame);
+	PARAM_INT(endFrame);
 	PARAM_INT(interpolateTics);
 	PARAM_INT(flags);
 	
-	SetAnimationInternal(self, animName, framerate, startFrame, loopFrame, interpolateTics, flags, I_GetTimeFrac());
+	SetAnimationInternal(self, animName, framerate, startFrame, loopFrame, endFrame, interpolateTics, flags, I_GetTimeFrac());
 
 	return 0;
 }

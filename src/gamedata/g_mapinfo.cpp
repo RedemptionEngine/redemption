@@ -324,7 +324,7 @@ FString level_info_t::LookupLevelName(uint32_t *langtable)
 	if (flags & LEVEL_LOOKUPLEVELNAME)
 	{
 		const char *thename;
-		const char *lookedup = GStrings.GetString(LevelName.GetChars(), langtable);
+		const char *lookedup = GStrings.CheckString(LevelName.GetChars(), langtable);
 		if (lookedup == NULL)
 		{
 			thename = LevelName.GetChars();
@@ -1826,7 +1826,6 @@ MapFlagHandlers[] =
 	{ "disableskyboxao",				MITYPE_CLRFLAG3,	LEVEL3_SKYBOXAO, 0 },
 	{ "avoidmelee",						MITYPE_SETFLAG3,	LEVEL3_AVOIDMELEE, 0 },
 	{ "attenuatelights",				MITYPE_SETFLAG3,	LEVEL3_ATTENUATE, 0 },
-	{ "pathing",						MITYPE_SETFLAG3,	LEVEL3_PATHING, 0 },
 	{ "nousersave",						MITYPE_SETVKDFLAG,	VKDLEVELFLAG_NOUSERSAVE, 0 },
 	{ "noautomap",						MITYPE_SETVKDFLAG,	VKDLEVELFLAG_NOAUTOMAP, 0 },
 	{ "noautosaveonenter",				MITYPE_SETVKDFLAG,	VKDLEVELFLAG_NOAUTOSAVEONENTER, 0 },

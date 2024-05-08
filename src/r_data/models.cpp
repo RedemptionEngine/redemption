@@ -278,12 +278,19 @@ double getCurrentFrame(const AnimOverride &anim, double tic)
 {
 	if(anim.framerate <= 0) return anim.startFrame;
 
-	double duration = double(anim.lastFrame - anim.firstFrame) / double(anim.framerate); // duration in seconds
-	double startPos = double(anim.startFrame - anim.firstFrame) / double(anim.framerate);
+	double frame = ((tic - anim.startTic) / GameTicRate) * anim.framerate; // position in frames
 
-	double pos = startPos + ((tic - anim.startTic) / GameTicRate); // position in seconds
+	double duration = double(anim.lastFrame) - anim.startFrame;
 
-	return (((anim.flags & ANIMOVERRIDE_LOOP) ? fmod(pos, duration) : min(pos, duration)) * anim.framerate) + anim.firstFrame;
+	if((anim.flags & ANIMOVERRIDE_LOOP) && frame >= duration)
+	{
+		frame = frame - duration;
+		return fmod(frame, anim.lastFrame - anim.loopFrame) + anim.loopFrame;
+	}
+	else
+	{
+		return min(frame, duration) + anim.startFrame;
+	}
 }
 
 static void calcFrame(const AnimOverride &anim, double tic, double &inter, int &prev, int &next)
@@ -294,22 +301,7 @@ static void calcFrame(const AnimOverride &anim, double tic, double &inter, int &
 
 	inter = frame - prev;
 
-	if(frame > anim.lastFrame)
-	{
-		if(anim.flags & ANIMOVERRIDE_LOOP)
-		{
-			next = anim.loopFrame + (prev - anim.lastFrame);
-		}
-		else
-		{
-			inter = 0;
-			prev = next = anim.lastFrame;
-		}
-	}
-	else
-	{
-		next = int(ceil(frame));
-	}
+	next = int(ceil(frame));
 }
 
 void RenderFrameModels(FModelRenderer *renderer, FLevelLocals *Level, const FSpriteModelFrame *smf, const FState *curState, const int curTics, FTranslationID translation, AActor* actor)
@@ -348,9 +340,18 @@ void RenderFrameModels(FModelRenderer *renderer, FLevelLocals *Level, const FSpr
 			if(actor->modelData->curAnim.startTic > tic)
 			{
 				inter = (tic - actor->modelData->curAnim.switchTic) / (actor->modelData->curAnim.startTic - actor->modelData->curAnim.switchTic);
-				
-				calcFrame(actor->modelData->curAnim, actor->modelData->curAnim.startTic, inter_next, decoupled_next_prev_frame, decoupled_next_frame);
-				calcFrame(actor->modelData->prevAnim, actor->modelData->curAnim.switchTic, inter_main, decoupled_main_prev_frame, decoupled_main_frame);
+
+				double nextFrame = actor->modelData->curAnim.startFrame;
+
+				double prevFrame = actor->modelData->prevAnim.startFrame;
+
+				decoupled_next_prev_frame = floor(nextFrame);
+				decoupled_next_frame = ceil(nextFrame);
+				inter_next = nextFrame - floor(nextFrame);
+
+				decoupled_main_prev_frame = floor(prevFrame);
+				decoupled_main_frame = ceil(prevFrame);
+				inter_main = prevFrame - floor(prevFrame);
 			}
 			else
 			{
@@ -523,7 +524,7 @@ void RenderFrameModels(FModelRenderer *renderer, FLevelLocals *Level, const FSpr
 			skinid = smf->skinIDs[i];
 		}
 
-		if (modelid >= 0)
+		if (modelid >= 0 && modelid < Models.size())
 		{
 			FModel * mdl = Models[modelid];
 			auto tex = skinid.isValid() ? TexMan.GetGameTexture(skinid, true) : nullptr;
@@ -1098,22 +1099,31 @@ void ParseModelDefLump(int Lump)
 
 FSpriteModelFrame * FindModelFrameRaw(const PClass * ti, int sprite, int frame, bool dropped)
 {
-	if (GetDefaultByType(ti)->hasmodel)
+	auto def = GetDefaultByType(ti);
+	if (def->hasmodel)
 	{
-		FSpriteModelFrame smf;
-
-		memset(&smf, 0, sizeof(smf));
-		smf.type=ti;
-		smf.sprite=sprite;
-		smf.frame=frame;
-
-		int hash = SpriteModelHash[ModelFrameHash(&smf) % SpriteModelFrames.Size()];
-
-		while (hash>=0)
+		if(def->flags9 & MF9_DECOUPLEDANIMATIONS)
 		{
-			FSpriteModelFrame * smff = &SpriteModelFrames[hash];
-			if (smff->type==ti && smff->sprite==sprite && smff->frame==frame) return smff;
-			hash=smff->hashnext;
+			FSpriteModelFrame * smf = BaseSpriteModelFrames.CheckKey((void*)ti);
+			if(smf) return smf;
+		}
+		else
+		{
+			FSpriteModelFrame smf;
+
+			memset(&smf, 0, sizeof(smf));
+			smf.type=ti;
+			smf.sprite=sprite;
+			smf.frame=frame;
+
+			int hash = SpriteModelHash[ModelFrameHash(&smf) % SpriteModelFrames.Size()];
+
+			while (hash>=0)
+			{
+				FSpriteModelFrame * smff = &SpriteModelFrames[hash];
+				if (smff->type==ti && smff->sprite==sprite && smff->frame==frame) return smff;
+				hash=smff->hashnext;
+			}
 		}
 	}
 
@@ -1141,7 +1151,7 @@ FSpriteModelFrame * FindModelFrame(const AActor * thing, int sprite, int frame, 
 
 	if(thing->flags9 & MF9_DECOUPLEDANIMATIONS)
 	{
-		return &BaseSpriteModelFrames[(thing->modelData != nullptr && thing->modelData->modelDef != nullptr) ? thing->modelData->modelDef : thing->GetClass()];
+		return BaseSpriteModelFrames.CheckKey((thing->modelData != nullptr && thing->modelData->modelDef != nullptr) ? thing->modelData->modelDef : thing->GetClass());
 	}
 	else
 	{

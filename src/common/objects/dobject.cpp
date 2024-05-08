@@ -218,8 +218,6 @@ CCMD (dumpclasses)
 //
 //==========================================================================
 
-#include "d_net.h"
-
 void DObject::InPlaceConstructor (void *mem)
 {
 	new ((EInPlace *)mem) DObject;
@@ -319,7 +317,7 @@ void DObject::Release()
 
 void DObject::Destroy ()
 {
-	NetworkEntityManager::RemoveNetworkEntity(this);
+	RemoveFromNetwork();
 
 	// We cannot call the VM during shutdown because all the needed data has been or is in the process of being deleted.
 	if (PClass::bVMOperational)
@@ -363,54 +361,49 @@ size_t DObject::PropagateMark()
 	const PClass *info = GetClass();
 	if (!PClass::bShutdown)
 	{
-		const size_t *offsets = info->FlatPointers;
-		if (offsets == NULL)
+		if (info->FlatPointers == nullptr)
 		{
-			const_cast<PClass *>(info)->BuildFlatPointers();
-			offsets = info->FlatPointers;
-		}
-		while (*offsets != ~(size_t)0)
-		{
-			GC::Mark((DObject **)((uint8_t *)this + *offsets));
-			offsets++;
+			info->BuildFlatPointers();
+			assert(info->FlatPointers);
 		}
 
-		offsets = info->ArrayPointers;
-		if (offsets == NULL)
+		for(size_t i = 0; i < info->FlatPointersSize; i++)
 		{
-			const_cast<PClass *>(info)->BuildArrayPointers();
-			offsets = info->ArrayPointers;
+			GC::Mark((DObject **)((uint8_t *)this + info->FlatPointers[i].first));
 		}
-		while (*offsets != ~(size_t)0)
+
+		if (info->ArrayPointers == nullptr)
 		{
-			auto aray = (TArray<DObject*>*)((uint8_t *)this + *offsets);
+			info->BuildArrayPointers();
+			assert(info->ArrayPointers);
+		}
+
+		for(size_t i = 0; i < info->ArrayPointersSize; i++)
+		{
+			auto aray = (TArray<DObject*>*)((uint8_t *)this + info->ArrayPointers[i].first);
 			for (auto &p : *aray)
 			{
 				GC::Mark(&p);
 			}
-			offsets++;
 		}
 
+		if (info->MapPointers == nullptr)
 		{
-			const std::pair<size_t,PType *> *maps = info->MapPointers;
-			if (maps == NULL)
-			{
-				const_cast<PClass *>(info)->BuildMapPointers();
-				maps = info->MapPointers;
-			}
-			while (maps->first != ~(size_t)0)
-			{
-				if(maps->second->RegType == REGT_STRING)
-				{ // FString,DObject*
-					PropagateMarkMap((ZSMap<FString,DObject*>*)((uint8_t *)this + maps->first));
-				}
-				else
-				{ // uint32_t,DObject*
-					PropagateMarkMap((ZSMap<uint32_t,DObject*>*)((uint8_t *)this + maps->first));
-				}
-				maps++;
-			}
+			info->BuildMapPointers();
+			assert(info->MapPointers);
+		}
 
+		for(size_t i = 0; i < info->MapPointersSize; i++)
+		{
+			PMap * type = static_cast<PMap*>(info->MapPointers[i].second);
+			if(type->KeyType->RegType == REGT_STRING)
+			{ // FString,DObject*
+				PropagateMarkMap((ZSMap<FString,DObject*>*)((uint8_t *)this + info->MapPointers[i].first));
+			}
+			else
+			{ // uint32_t,DObject*
+				PropagateMarkMap((ZSMap<uint32_t,DObject*>*)((uint8_t *)this + info->MapPointers[i].first));
+			}
 		}
 		return info->Size;
 	}
@@ -423,46 +416,116 @@ size_t DObject::PropagateMark()
 //
 //==========================================================================
 
-size_t DObject::PointerSubstitution (DObject *old, DObject *notOld)
+template<typename M>
+static void MapPointerSubstitution(M *map, size_t &changed, DObject *old, DObject *notOld, const bool shouldSwap)
+{
+	TMapIterator<typename M::KeyType, DObject*> it(*map);
+	typename M::Pair * p;
+	while(it.NextPair(p))
+	{
+		if (p->Value == old)
+		{
+			if (shouldSwap)
+			{
+				p->Value = notOld;
+				changed++;
+			}
+			else if (p->Value != nullptr)
+			{
+				p->Value = nullptr;
+				changed++;
+			}
+		}
+	}
+}
+
+size_t DObject::PointerSubstitution (DObject *old, DObject *notOld, bool nullOnFail)
 {
 	const PClass *info = GetClass();
-	const size_t *offsets = info->FlatPointers;
 	size_t changed = 0;
-	if (offsets == NULL)
+	if (info->FlatPointers == nullptr)
 	{
-		const_cast<PClass *>(info)->BuildFlatPointers();
-		offsets = info->FlatPointers;
-	}
-	while (*offsets != ~(size_t)0)
-	{
-		if (*(DObject **)((uint8_t *)this + *offsets) == old)
-		{
-			*(DObject **)((uint8_t *)this + *offsets) = notOld;
-			changed++;
-		}
-		offsets++;
+		info->BuildFlatPointers();
+		assert(info->FlatPointers);
 	}
 
-	offsets = info->ArrayPointers;
-	if (offsets == NULL)
+	for(size_t i = 0; i < info->FlatPointersSize; i++)
 	{
-		const_cast<PClass *>(info)->BuildArrayPointers();
-		offsets = info->ArrayPointers;
+		size_t offset = info->FlatPointers[i].first;
+		auto& obj = *(DObject**)((uint8_t*)this + offset);
+
+		if (obj == old)
+		{
+			// If a pointer's type is null, that means it's native and anything native is safe to swap
+			// around due to its inherit type expansiveness.
+			if (info->FlatPointers[i].second == nullptr || notOld->IsKindOf(info->FlatPointers[i].second->PointedClass()))
+			{
+				obj = notOld;
+				changed++;
+			}
+			else if (nullOnFail && obj != nullptr)
+			{
+				obj = nullptr;
+				changed++;
+			}
+		}
 	}
-	while (*offsets != ~(size_t)0)
+
+	if (info->ArrayPointers == nullptr)
 	{
-		auto aray = (TArray<DObject*>*)((uint8_t *)this + *offsets);
+		info->BuildArrayPointers();
+		assert(info->ArrayPointers);
+	}
+
+	for(size_t i = 0; i < info->ArrayPointersSize; i++)
+	{
+		const bool isType = notOld->IsKindOf(static_cast<PObjectPointer*>(info->ArrayPointers[i].second->ElementType)->PointedClass());
+
+		if (!isType && !nullOnFail)
+			continue;
+
+		auto aray = (TArray<DObject*>*)((uint8_t*)this + info->ArrayPointers[i].first);
 		for (auto &p : *aray)
 		{
 			if (p == old)
 			{
-				p = notOld;
-				changed++;
+				if (isType)
+				{
+					p = notOld;
+					changed++;
+				}
+				else if (p != nullptr)
+				{
+					p = nullptr;
+					changed++;
+				}
 			}
 		}
-		offsets++;
 	}
 
+	if (info->MapPointers == nullptr)
+	{
+		info->BuildMapPointers();
+		assert(info->MapPointers);
+	}
+
+	for(size_t i = 0; i < info->MapPointersSize; i++)
+	{
+		PMap * type = static_cast<PMap*>(info->MapPointers[i].second);
+
+		const bool isType = notOld->IsKindOf(static_cast<PObjectPointer*>(type->ValueType)->PointedClass());
+		if (!isType && !nullOnFail)
+			continue;
+
+		if(type->KeyType->RegType == REGT_STRING)
+		{ // FString,DObject*
+			MapPointerSubstitution((ZSMap<FString,DObject*>*)((uint8_t *)this + info->MapPointers[i].first), changed, old, notOld, isType);
+		}
+		else
+		{ // uint32_t,DObject*
+			MapPointerSubstitution((ZSMap<uint32_t,DObject*>*)((uint8_t *)this + info->MapPointers[i].first), changed, old, notOld, isType);
+		}
+	}
 
 	return changed;
 }
@@ -531,6 +594,123 @@ void DObject::CheckIfSerialized () const
 	}
 }
 
+DEFINE_ACTION_FUNCTION(DObject, MSTime)
+{
+	ACTION_RETURN_INT((uint32_t)I_msTime());
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DObject, MSTimef, I_msTimeF)
+{
+	ACTION_RETURN_FLOAT(I_msTimeF());
+}
+
+void *DObject::ScriptVar(FName field, PType *type)
+{
+	auto cls = GetClass();
+	auto sym = dyn_cast<PField>(cls->FindSymbol(field, true));
+	if (sym && (sym->Type == type || type == nullptr))
+	{
+		if (!(sym->Flags & VARF_Meta))
+		{
+			return (((char*)this) + sym->Offset);
+		}
+		else
+		{
+			return (cls->Meta + sym->Offset);
+		}
+	}
+	// This is only for internal use so I_Error is fine.
+	I_Error("Variable %s not found in %s\n", field.GetChars(), cls->TypeName.GetChars());
+}
+
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+void NetworkEntityManager::InitializeNetworkEntities()
+{
+	if (!s_netEntities.Size())
+		s_netEntities.AppendFill(nullptr, NetIDStart); // Allocate the first 0-8 slots for the world and clients.
+}
+
+// Clients need special handling since they always go in slots 1 - MAXPLAYERS.
+void NetworkEntityManager::SetClientNetworkEntity(DObject* mo, const unsigned int playNum)
+{
+	// If resurrecting, we need to swap the corpse's position with the new pawn's
+	// position so it's no longer considered the client's body.
+	const uint32_t id = ClientNetIDStart + playNum;
+	DObject* const oldBody = s_netEntities[id];
+	if (oldBody != nullptr)
+	{
+		if (oldBody == mo)
+			return;
+
+		const uint32_t curID = mo->GetNetworkID();
+
+		s_netEntities[curID] = oldBody;
+		oldBody->ClearNetworkID();
+		oldBody->SetNetworkID(curID);
+
+		mo->ClearNetworkID();
+	}
+	else
+	{
+		RemoveNetworkEntity(mo); // Free up its current id.
+	}
+
+	s_netEntities[id] = mo;
+	mo->SetNetworkID(id);
+}
+
+void NetworkEntityManager::AddNetworkEntity(DObject* const ent)
+{
+	if (ent->IsNetworked())
+		return;
+
+	// Slot 0 is reserved for the world.
+	// Clients go in the first 1 - MAXPLAYERS slots
+	// Everything else is first come first serve.
+	uint32_t id = WorldNetID;
+	if (s_openNetIDs.Size())
+	{
+		s_openNetIDs.Pop(id);
+		s_netEntities[id] = ent;
+	}
+	else
+	{
+		id = s_netEntities.Push(ent);
+	}
+
+	ent->SetNetworkID(id);
+}
+
+void NetworkEntityManager::RemoveNetworkEntity(DObject* const ent)
+{
+	if (!ent->IsNetworked())
+		return;
+
+	const uint32_t id = ent->GetNetworkID();
+	if (id == WorldNetID)
+		return;
+
+	assert(s_netEntities[id] == ent);
+	if (id >= NetIDStart)
+		s_openNetIDs.Push(id);
+	s_netEntities[id] = nullptr;
+	ent->ClearNetworkID();
+}
+
+DObject* NetworkEntityManager::GetNetworkEntity(const uint32_t id)
+{
+	if (id == WorldNetID || id >= s_netEntities.Size())
+		return nullptr;
+
+	return s_netEntities[id];
+}
+
 //==========================================================================
 //
 //
@@ -558,6 +738,11 @@ void DObject::EnableNetworking(const bool enable)
 		NetworkEntityManager::AddNetworkEntity(this);
 	else
 		NetworkEntityManager::RemoveNetworkEntity(this);
+}
+
+void DObject::RemoveFromNetwork()
+{
+	NetworkEntityManager::RemoveNetworkEntity(this);
 }
 
 static unsigned int GetNetworkID(DObject* const self)
@@ -599,31 +784,3 @@ DEFINE_ACTION_FUNCTION_NATIVE(DObject, GetNetworkEntity, GetNetworkEntity)
 	ACTION_RETURN_OBJECT(NetworkEntityManager::GetNetworkEntity(id));
 }
 
-DEFINE_ACTION_FUNCTION(DObject, MSTime)
-{
-	ACTION_RETURN_INT((uint32_t)I_msTime());
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DObject, MSTimef, I_msTimeF)
-{
-	ACTION_RETURN_FLOAT(I_msTimeF());
-}
-
-void *DObject::ScriptVar(FName field, PType *type)
-{
-	auto cls = GetClass();
-	auto sym = dyn_cast<PField>(cls->FindSymbol(field, true));
-	if (sym && (sym->Type == type || type == nullptr))
-	{
-		if (!(sym->Flags & VARF_Meta))
-		{
-			return (((char*)this) + sym->Offset);
-		}
-		else
-		{
-			return (cls->Meta + sym->Offset);
-		}
-	}
-	// This is only for internal use so I_Error is fine.
-	I_Error("Variable %s not found in %s\n", field.GetChars(), cls->TypeName.GetChars());
-}

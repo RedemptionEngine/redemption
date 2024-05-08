@@ -442,10 +442,7 @@ enum ActorFlag9
 	MF9_DOSHADOWBLOCK			= 0x00000002,	// [inkoalawetrust] Should the monster look for SHADOWBLOCK actors ?
 	MF9_SHADOWBLOCK				= 0x00000004,	// [inkoalawetrust] Actors in the line of fire with this flag trigger the MF_SHADOW aiming penalty.
 	MF9_SHADOWAIMVERT			= 0x00000008,	// [inkoalawetrust] Monster aim is also offset vertically when aiming at shadow actors.
-	MF9_DECOUPLEDANIMATIONS		= 0x00000010,	// [RL0] Decouple model animations from states
-	MF9_PATHING					= 0x00000020,	// [MC] Enables monsters to do pathfinding, such as A*.
-	MF9_KEEPPATH				= 0x00000040,	// [MC] Forces monsters to keep to the path when target's in sight.
-	MF9_NOPATHING				= 0x00000080,	// [MC] override the mapinfo "pathfinding"
+	MF9_DECOUPLEDANIMATIONS	= 0x00000010,	// [RL0] Decouple model animations from states
 };
 
 // --- mobj.renderflags ---
@@ -712,7 +709,7 @@ struct AnimOverride
 	double startFrame;
 	int flags = ANIMOVERRIDE_NONE;
 	float framerate;
-	double startTic; // when the animation starts if interpolating from previous animation
+	double startTic; // when the current animation started (changing framerates counts as restarting) (or when animation starts if interpolating from previous animation)
 	double switchTic; // when the animation was changed -- where to interpolate the switch from
 };
 
@@ -720,6 +717,16 @@ struct ModelOverride
 {
 	int modelID;
 	TArray<FTextureID> surfaceSkinIDs;
+};
+
+struct AnimModelOverride
+{
+	int id;
+
+	AnimModelOverride() = default;
+
+	AnimModelOverride(int i) : id(i) {}
+	operator int() { return id; }
 };
 
 enum EModelDataFlags
@@ -732,14 +739,14 @@ class DActorModelData : public DObject
 {
 	DECLARE_CLASS(DActorModelData, DObject);
 public:
-	PClass *				modelDef;
-	TArray<ModelOverride>	models;
-	TArray<FTextureID>		skinIDs;
-	TArray<int>				animationIDs;
-	TArray<int>				modelFrameGenerators;
-	int						flags;
-	int						overrideFlagsSet;
-	int						overrideFlagsClear;
+	PClass *					modelDef;
+	TArray<ModelOverride>		models;
+	TArray<FTextureID>			skinIDs;
+	TArray<AnimModelOverride>	animationIDs;
+	TArray<int>					modelFrameGenerators;
+	int							flags;
+	int							overrideFlagsSet;
+	int							overrideFlagsClear;
 
 	AnimOverride curAnim;
 	AnimOverride prevAnim; // used for interpolation when switching anims
@@ -1104,11 +1111,6 @@ public:
 	void AttachLight(unsigned int count, const FLightDefaults *lightdef);
 	void SetDynamicLights();
 
-	void ClearPath();
-	bool CanPathfind();
-	bool CallExcludeNode(AActor *node);
-	void CallReachedNode(AActor *node);
-
 // info for drawing
 // NOTE: The first member variable *must* be snext.
 	AActor			*snext, **sprev;	// links in sector (if needed)
@@ -1165,7 +1167,6 @@ public:
 	TObjPtr<DBoneComponents*>		boneComponentData;
 
 // interaction info
-	TArray<TObjPtr<AActor*> > Path;
 	FBlockNode		*BlockNode;			// links in blocks (if needed)
 	struct sector_t	*Sector;
 	subsector_t *		subsector;
@@ -1361,13 +1362,21 @@ public:
 	DVector3 Prev;
 	DRotator PrevAngles;
 	DAngle   PrevFOV;
-	int PrevPortalGroup;
 	TArray<FDynamicLight *> AttachedLights;
 	TDeletingArray<FLightDefaults *> UserLights;
+	int PrevPortalGroup;
 
 	// When was this actor spawned?
 	int SpawnTime;
 	uint32_t SpawnOrder;
+
+	int UnmorphTime;
+	int MorphFlags;
+	int PremorphProperties;
+	PClassActor* MorphExitFlash;
+	// landing speed from a jump with normal gravity (squats the player's view)
+	// (note: this is put into AActor instead of the PlayerPawn because non-players also use the value)
+	double LandingSpeed;
 
 	double SourceRadius = 5.0; // Light source radius
 
@@ -1750,7 +1759,7 @@ struct FTranslatedLineTarget
 	bool unlinked;	// found by a trace that went through an unlinked portal.
 };
 
-void PlayerPointerSubstitution(AActor* oldPlayer, AActor* newPlayer);
+void PlayerPointerSubstitution(AActor* oldPlayer, AActor* newPlayer, bool removeOld);
 int MorphPointerSubstitution(AActor* from, AActor* to);
 
 #define S_FREETARGMOBJ	1

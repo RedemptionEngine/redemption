@@ -113,6 +113,7 @@ static HCURSOR CreateBitmapCursor(int xhot, int yhot, HBITMAP and_mask, HBITMAP 
 
 EXTERN_CVAR (Bool, queryiwad);
 // Used on welcome/IWAD screen.
+EXTERN_CVAR(Bool, longsavemessages)
 
 extern HANDLE StdOut;
 extern bool FancyStdOut;
@@ -351,7 +352,7 @@ static void SetQueryIWad(HWND dialog)
 //
 //==========================================================================
 
-int I_PickIWad(WadStuff *wads, int numwads, bool showwin, int defaultiwad, int& autoloadflags)
+int I_PickIWad(WadStuff *wads, int numwads, bool showwin, int defaultiwad, int& autoloadflags, FString &extraArgs)
 {
 	int vkey;
 	if (stricmp(queryiwad_key, "shift") == 0)
@@ -368,7 +369,7 @@ int I_PickIWad(WadStuff *wads, int numwads, bool showwin, int defaultiwad, int& 
 	}
 	if (showwin || (vkey != 0 && GetAsyncKeyState(vkey)))
 	{
-		return LauncherWindow::ExecModal(wads, numwads, defaultiwad, &autoloadflags);
+		return LauncherWindow::ExecModal(wads, numwads, defaultiwad, &autoloadflags, &extraArgs);
 	}
 	return defaultiwad;
 }
@@ -823,13 +824,17 @@ void I_OpenShellFolder(const char* infolder)
 	}
 	else if (SetCurrentDirectoryW(WideString(infolder).c_str()))
 	{
-		Printf("Opening folder: %s\n", infolder);
+		if (longsavemessages)
+			Printf("Opening folder: %s\n", infolder);
 		ShellExecuteW(NULL, L"open", L"explorer.exe", L".", NULL, SW_SHOWNORMAL);
 		SetCurrentDirectoryW(curdir.Data());
 	}
 	else
 	{
-		Printf("Unable to open directory '%s\n", infolder);
+		if (longsavemessages)
+			Printf("Unable to open directory '%s\n", infolder);
+		else
+			Printf("Unable to open requested directory\n");
 	}
 }
 

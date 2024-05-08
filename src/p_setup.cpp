@@ -326,7 +326,6 @@ void FLevelLocals::ClearLevelData(bool fullgc)
 	}
 	ClearPortals();
 
-	PathNodes.Clear();
 	tagManager.Clear();
 	ClearTIDHashes();
 	if (SpotState) SpotState->Destroy();
@@ -503,6 +502,18 @@ void P_SetupLevel(FLevelLocals *Level, int position, bool newGame)
 			{
 				Level->Players[i]->mo = nullptr;
 				FPlayerStart *mthing = Level->PickPlayerStart(i);
+				Level->SpawnPlayer(mthing, i, (Level->flags2 & LEVEL2_PRERAISEWEAPON) ? SPF_WEAPONFULLYUP : 0);
+			}
+		}
+	}
+	else if (newGame)
+	{
+		for (i = 0; i < MAXPLAYERS; ++i)
+		{
+			// Didn't have a player spawn available so spawn it now.
+			if (Level->PlayerInGame(i) && Level->Players[i]->playerstate == PST_ENTER && Level->Players[i]->mo == nullptr)
+			{
+				FPlayerStart* mthing = Level->PickPlayerStart(i);
 				Level->SpawnPlayer(mthing, i, (Level->flags2 & LEVEL2_PRERAISEWEAPON) ? SPF_WEAPONFULLYUP : 0);
 			}
 		}
