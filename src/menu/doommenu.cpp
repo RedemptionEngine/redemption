@@ -254,7 +254,7 @@ bool M_SetSpecialMenu(FName& menu, int param)
 		}
 		if (!(dmflagsr & DFR_YES_USERSAVE) && (primaryLevel->flagsr & LEVELR_NOSAVEGAME))
 		{
-			M_StartMessage (GStrings("SAVEBLOCKED"), 1);
+			M_StartMessage (GStrings.GetString("SAVEBLOCKED"), 1);
 			return false;
 		}
 		break;
