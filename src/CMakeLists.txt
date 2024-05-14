@@ -408,19 +408,14 @@ set( PLAT_WIN32_SOURCES
 	common/platform/win32/st_start.cpp
 	common/platform/win32/base_sysfb.cpp
 	common/platform/win32/win32basevideo.cpp
+	common/platform/win32/i_crash.cpp
 	)
 
 if (HAVE_VULKAN)
 	list (APPEND PLAT_WIN32_SOURCES common/platform/win32/win32vulkanvideo.cpp )
 endif()
 
-# todo: implement an actual crash catcher for ARM
-# for now this is purely experimental
-if (NOT ${TARGET_ARCHITECTURE} MATCHES "arm" )
-	set (PLAT_WIN32_SOURCES ${PLAT_WIN32_SOURCES} common/platform/win32/i_crash.cpp )
-endif()
 if (MSVC AND ${TARGET_ARCHITECTURE} MATCHES "arm")
-	set (PLAT_WIN32_SOURCES ${PLAT_WIN32_SOURCES} common/platform/win32/i_crash_arm.cpp )
 	add_definitions( -DNO_SSE -D__ARM__ -DRAPIDJSON_ENDIAN=RAPIDJSON_LITTLEENDIAN)
 endif()
 	
@@ -1332,6 +1327,9 @@ if( MSVC )
 		set( LINKERSTUFF "${LINKERSTUFF} /MAP" )
 	endif()
 	set_target_properties(zdoom PROPERTIES LINK_FLAGS ${LINKERSTUFF})
+
+	# Create stripped PDBs for nightly builds
+	set_target_properties(zdoom PROPERTIES LINK_FLAGS_RELWITHDEBINFO /PDBSTRIPPED:${ZDOOM_OUTPUT_DIR}/RelWithDebInfo/${ZDOOM_EXE_NAME}-stripped.pdb)
 
 	add_custom_command(TARGET zdoom POST_BUILD
 		COMMAND "mt.exe" -manifest \"${CMAKE_CURRENT_SOURCE_DIR}\\common\\platform\\win32\\manifest.xml\" -outputresource:\"$<TARGET_FILE:zdoom>\"\;\#1
