@@ -1,7 +1,8 @@
-#include <algorithm>
+
 #include "widgets/lineedit/lineedit.h"
 #include "core/utf8reader.h"
 #include "core/colorf.h"
+#include <algorithm>
 
 LineEdit::LineEdit(Widget* parent) : Widget(parent)
 {
