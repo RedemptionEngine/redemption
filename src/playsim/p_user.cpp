@@ -99,11 +99,12 @@ static FRandom pr_skullpop ("SkullPop");
 
 // [SP] Allows respawn in single player
 CVAR(Bool, sv_singleplayerrespawn, false, CVAR_SERVERINFO | CVAR_CHEAT)
+CVAR(Float, snd_footstepvolume, 1.f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 // Variables for prediction
-CVAR (Bool, cl_noprediction, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, cl_predict_specials, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 // Deprecated
+CVAR(Bool, cl_noprediction, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, cl_predict_lerpscale, 0.05f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, cl_predict_lerpthreshold, 2.00f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
@@ -124,6 +125,11 @@ CUSTOM_CVAR(Float, cl_rubberband_minmove, 20.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFI
 	if (self < 0.1f)
 		self = 0.1f;
 }
+CUSTOM_CVAR(Float, cl_rubberband_limit, 756.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+{
+	if (self < 0.0f)
+		self = 0.0f;
+}
 
 ColorSetList ColorSets;
 PainFlashList PainFlashes;
@@ -138,6 +144,8 @@ CUSTOM_CVAR(Float, fov, 90.f, CVAR_ARCHIVE | CVAR_USERINFO | CVAR_NOINITCALL)
 static DVector3 LastPredictedPosition;
 static int LastPredictedPortalGroup;
 static int LastPredictedTic;
+
+static TArray<FRandom> PredictionRNG;
 
 static player_t PredictionPlayerBackup;
 static AActor *PredictionActor;
@@ -353,6 +361,8 @@ void player_t::CopyFrom(player_t &p, bool copyPSP)
 	MUSINFOactor = p.MUSINFOactor;
 	MUSINFOtics = p.MUSINFOtics;
 	SoundClass = p.SoundClass;
+	LastSafePos = p.LastSafePos;
+	angleOffsetTargets = p.angleOffsetTargets;
 	if (copyPSP)
 	{
 		// This needs to transfer ownership completely.
@@ -512,6 +522,23 @@ DEFINE_ACTION_FUNCTION(_PlayerInfo, SetFOV)
 	PARAM_FLOAT(fov);
 	self->SetFOV((float)fov);
 	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, SetSkin)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	PARAM_INT(skinIndex);
+	if (skinIndex >= 0 && skinIndex < Skins.size())
+	{
+		// commented code - cvar_set calls this automatically, along with saving the skin selection.
+		//self->userinfo.SkinNumChanged(skinIndex);
+		cvar_set("skin", Skins[skinIndex].Name.GetChars());
+		ACTION_RETURN_INT(self->userinfo.GetSkin());
+	}
+	else
+	{
+		ACTION_RETURN_INT(-1);
+	}
 }
 
 //===========================================================================
@@ -765,6 +792,12 @@ DEFINE_ACTION_FUNCTION(_PlayerInfo, GetSkin)
 {
 	PARAM_SELF_STRUCT_PROLOGUE(player_t);
 	ACTION_RETURN_INT(self->userinfo.GetSkin());
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, GetSkinCount)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	ACTION_RETURN_INT(Skins.size());
 }
 
 DEFINE_ACTION_FUNCTION(_PlayerInfo, GetGender)
@@ -1175,15 +1208,6 @@ DEFINE_ACTION_FUNCTION(APlayerPawn, CheckMusicChange)
 
 void P_CheckEnvironment(player_t *player)
 {
-	P_PlayerOnSpecial3DFloor(player);
-	P_PlayerInSpecialSector(player);
-
-	if (!player->mo->isAbove(player->mo->Sector->floorplane.ZatPoint(player->mo)) ||
-		player->mo->waterlevel)
-	{
-		// Player must be touching the floor
-		P_PlayerOnSpecialFlat(player, P_GetThingFloorType(player->mo));
-	}
 	if (player->mo->Vel.Z <= -player->mo->FloatVar(NAME_FallingScreamMinSpeed) &&
 		player->mo->Vel.Z >= -player->mo->FloatVar(NAME_FallingScreamMaxSpeed) && player->mo->alternative == nullptr &&
 		player->mo->waterlevel == 0)
@@ -1266,6 +1290,13 @@ void P_PlayerThink (player_t *player)
 	if (player->SubtitleCounter > 0)
 	{
 		player->SubtitleCounter--;
+	}
+
+	if (player->playerstate == PST_LIVE
+		&& player->mo->Z() <= player->mo->floorz
+		&& !player->mo->Sector->IsDangerous(player->mo->Pos(), player->mo->Height))
+	{
+		player->LastSafePos = player->mo->Pos();
 	}
 
 	// Bots do not think in freeze mode.
@@ -1422,8 +1453,7 @@ void P_PredictPlayer (player_t *player)
 {
 	int maxtic;
 
-	if (cl_noprediction ||
-		singletics ||
+	if (singletics ||
 		demoplayback ||
 		player->mo == NULL ||
 		player != player->mo->Level->GetConsolePlayer() ||
@@ -1441,6 +1471,8 @@ void P_PredictPlayer (player_t *player)
 	{
 		return;
 	}
+
+	FRandom::SaveRNGState(PredictionRNG);
 
 	// Save original values for restoration later
 	PredictionPlayerBackup.CopyFrom(*player, false);
@@ -1497,7 +1529,7 @@ void P_PredictPlayer (player_t *player)
 
 	// This essentially acts like a mini P_Ticker where only the stuff relevant to the client is actually
 	// called. Call order is preserved.
-	bool rubberband = false;
+	bool rubberband = false, rubberbandLimit = false;
 	DVector3 rubberbandPos = {};
 	const bool canRubberband = LastPredictedTic >= 0 && cl_rubberband_scale > 0.0f && cl_rubberband_scale < 1.0f;
 	const double rubberbandThreshold = max<float>(cl_rubberband_minmove, cl_rubberband_threshold);
@@ -1521,9 +1553,11 @@ void P_PredictPlayer (player_t *player)
 			{
 				rubberband = true;
 				rubberbandPos = player->mo->Pos();
+				rubberbandLimit = cl_rubberband_limit > 0.0f && dist > cl_rubberband_limit * cl_rubberband_limit;
 			}
 		}
 
+		player->oldbuttons = player->cmd.ucmd.buttons;
 		player->cmd = localcmds[i % LOCALCMDTICS];
 		player->mo->ClearInterpolation();
 		player->mo->ClearFOVInterpolation();
@@ -1533,21 +1567,29 @@ void P_PredictPlayer (player_t *player)
 
 	if (rubberband)
 	{
-		R_ClearInterpolationPath();
-		player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
-
 		DPrintf(DMSG_NOTIFY, "Prediction mismatch at (%.3f, %.3f, %.3f)\nExpected: (%.3f, %.3f, %.3f)\nCorrecting to (%.3f, %.3f, %.3f)\n",
 			LastPredictedPosition.X, LastPredictedPosition.Y, LastPredictedPosition.Z,
 			rubberbandPos.X, rubberbandPos.Y, rubberbandPos.Z,
 			player->mo->X(), player->mo->Y(), player->mo->Z());
 
-		DVector3 snapPos = {};
-		P_LerpCalculate(player->mo, LastPredictedPosition, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
-		player->mo->PrevPortalGroup = LastPredictedPortalGroup;
-		player->mo->Prev = LastPredictedPosition;
-		const double zOfs = player->viewz - player->mo->Z();
-		player->mo->SetXYZ(snapPos);
-		player->viewz = snapPos.Z + zOfs;
+		if (rubberbandLimit)
+		{
+			// If too far away, instantly snap the player's view to their correct position.
+			player->mo->renderflags |= RF_NOINTERPOLATEVIEW;
+		}
+		else
+		{
+			R_ClearInterpolationPath();
+			player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
+
+			DVector3 snapPos = {};
+			P_LerpCalculate(player->mo, LastPredictedPosition, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
+			player->mo->PrevPortalGroup = LastPredictedPortalGroup;
+			player->mo->Prev = LastPredictedPosition;
+			const double zOfs = player->viewz - player->mo->Z();
+			player->mo->SetXYZ(snapPos);
+			player->viewz = snapPos.Z + zOfs;
+		}
 	}
 
 	// This is intentionally done after rubberbanding starts since it'll automatically smooth itself towards
@@ -1570,6 +1612,8 @@ void P_UnPredictPlayer ()
 		{
 			// Q: Can this happen? If yes, can we continue?
 		}
+
+		FRandom::RestoreRNGState(PredictionRNG);
 
 		AActor *savedcamera = player->camera;
 
@@ -1743,7 +1787,9 @@ void player_t::Serialize(FSerializer &arc)
 		("onground", onground)
 		("musinfoactor", MUSINFOactor)
 		("musinfotics", MUSINFOtics)
-		("soundclass", SoundClass);
+		("soundclass", SoundClass)
+		("angleoffsettargets", angleOffsetTargets)
+		("lastsafepos", LastSafePos);
 
 	if (arc.isWriting ())
 	{

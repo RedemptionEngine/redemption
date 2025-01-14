@@ -59,6 +59,8 @@ EXTERN_CVAR(Bool, autoloadbrightmaps)
 EXTERN_CVAR(Bool, autoloadwidescreen)
 EXTERN_CVAR(String, language)
 
+bool foundprio = false; // global to prevent iwad box from appearing
+
 //==========================================================================
 //
 // Parses IWAD definitions
@@ -111,6 +113,12 @@ void FIWadManager::ParseIWadInfo(const char *fn, const char *data, int datasize,
 						iwad->prio = sc.Number;
 					}
 				}
+				else if (sc.Compare("SupportWAD"))
+				{
+					sc.MustGetStringName("=");
+					sc.MustGetString();
+					iwad->SupportWAD = sc.String;
+				}
 				else if (sc.Compare("Config"))
 				{
 					sc.MustGetStringName("=");
@@ -137,6 +145,10 @@ void FIWadManager::ParseIWadInfo(const char *fn, const char *data, int datasize,
 				else if (sc.Compare("NoKeyboardCheats"))
 				{
 					iwad->nokeyboardcheats = true;
+				}
+				else if (sc.Compare("SkipBexStringsIfLanguage"))
+				{
+					iwad->SkipBexStringsIfLanguage = true;
 				}
 				else if (sc.Compare("Compatibility"))
 				{
@@ -558,6 +570,18 @@ void FIWadManager::ValidateIWADs()
 
 static bool havepicked = false;
 
+
+FString FIWadManager::IWADPathFileSearch(const FString &file)
+{
+	for(const FString &path : mSearchPaths)
+	{
+		FString f = path + "/" + file;
+		if(FileExists(f)) return f;
+	}
+
+	return "";
+}
+
 int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char *iwad, const char *zdoom_wad, const char *optional_wad)
 {
 	const char *iwadparm = Args->CheckValue ("-iwad");
@@ -673,6 +697,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 				picks.Clear();
 				picks.Push(found);
 				pickedprio = mIWadInfos[found.mInfoIndex].prio;
+				foundprio = true;
 			}
 		}
 	}
@@ -728,7 +753,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 	int pick = 0;
 
 	// Present the IWAD selection box.
-	bool alwaysshow = (queryiwad && !Args->CheckParm("-iwad"));
+	bool alwaysshow = (queryiwad && !Args->CheckParm("-iwad") && !foundprio);
 
 	if (alwaysshow || picks.Size() > 1)
 	{
@@ -798,11 +823,11 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 	D_AddFile (wadfiles, zdoom_wad, true, -1, GameConfig);
 
 	// [SP] Load non-free assets if available. This must be done before the IWAD.
-	int iwadnum;
-	if (D_AddFile(wadfiles, optional_wad, true, -1, GameConfig))
-		iwadnum = 2;
-	else
-		iwadnum = 1;
+	int iwadnum = 1;
+	if (optional_wad && D_AddFile(wadfiles, optional_wad, true, -1, GameConfig))
+	{
+		iwadnum++;
+	}
 
 	fileSystem.SetIwadNum(iwadnum);
 	if (picks[pick].mRequiredPath.IsNotEmpty())
@@ -814,6 +839,17 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 	fileSystem.SetMaxIwadNum(iwadnum);
 
 	auto info = mIWadInfos[picks[pick].mInfoIndex];
+
+	if(info.SupportWAD.IsNotEmpty())
+	{
+		FString supportWAD = IWADPathFileSearch(info.SupportWAD);
+
+		if(supportWAD.IsNotEmpty())
+		{
+			D_AddFile(wadfiles, supportWAD.GetChars(), true, -1, GameConfig);
+		}
+	}
+
 	// Load additional resources from the same directory as the IWAD itself.
 	for (unsigned i=0; i < info.Load.Size(); i++)
 	{

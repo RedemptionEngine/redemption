@@ -161,6 +161,7 @@ bool M_SetSpecialMenu(FName& menu, int param);	// game specific checks
 
 const FIWADInfo *D_FindIWAD(TArray<FString> &wadfiles, const char *iwad, const char *basewad);
 void InitWidgetResources(const char* basewad);
+void CloseWidgetResources();
 
 // PUBLIC FUNCTION PROTOTYPES ----------------------------------------------
 
@@ -1075,7 +1076,7 @@ void D_Display ()
 				if (DrawFSHUD || automapactive) StatusBar->DrawAltHUD();
 				if (players[consoleplayer].camera && players[consoleplayer].camera->player && !automapactive)
 				{
-					StatusBar->DrawCrosshair();
+					StatusBar->DrawCrosshair(vp.TicFrac);
 				}
 				StatusBar->CallDraw (HUD_AltHud, vp.TicFrac);
 				StatusBar->DrawTopStuff (HUD_AltHud);
@@ -1818,7 +1819,7 @@ bool ConsiderPatches (const char *arg)
 		if ( (f = BaseFileSearch(args[i].GetChars(), ".deh", false, GameConfig)) ||
 			 (f = BaseFileSearch(args[i].GetChars(), ".bex", false, GameConfig)) )
 		{
-			D_LoadDehFile(f);
+			D_LoadDehFile(f, 0);
 		}
 	}
 	return argc > 0;
@@ -3063,39 +3064,6 @@ static void System_HudScaleChanged()
 
 bool  CheckSkipGameOptionBlock(const char* str);
 
-//==========================================================================
-//
-//
-//
-//==========================================================================
-
-static FILE* D_GetHashFile()
-{
-	FILE *hashfile = nullptr;
-
-	if (Args->CheckParm("-hashfiles"))
-	{
-		const char *filename = "fileinfo.txt";
-		Printf("Hashing loaded content to: %s\n", filename);
-		hashfile = fopen(filename, "w");
-		if (hashfile)
-		{
-			Printf("Notice: File hashing is incredibly verbose. Expect loading files to take much longer than usual.\n");
-			fprintf(hashfile, "%s version %s (%s)\n", GAMENAME, GetVersionString(), GetGitHash());
-#ifdef __VERSION__
-			fprintf(hashfile, "Compiler version: %s\n", __VERSION__);
-#endif
-			fprintf(hashfile, "Command line:");
-			for (int i = 0; i < Args->NumArgs(); ++i)
-			{
-				fprintf(hashfile, " %s", Args->GetArg(i));
-			}
-			fprintf(hashfile, "\n");
-		}
-	}
-	return hashfile;
-}
-
 // checks if a file within a directory is allowed to be added to the file system.
 static bool FileNameCheck(const char* base, const char* path)
 {
@@ -3252,8 +3220,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	);
 
 	bool allowduplicates = Args->CheckParm("-allowduplicates");
-	auto hashfile = D_GetHashFile();
-	if (!fileSystem.InitMultipleFiles(allwads, &lfi, FileSystemPrintf, allowduplicates, hashfile))
+	if (!fileSystem.InitMultipleFiles(allwads, &lfi, FileSystemPrintf, allowduplicates))
 	{
 		I_FatalError("FileSystem: no files found");
 	}
@@ -3432,7 +3399,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	auto numbasesounds = soundEngine->GetNumSounds();
 
 	// Load embedded Dehacked patches
-	D_LoadDehLumps(FromIWAD);
+	D_LoadDehLumps(FromIWAD, iwad_info->SkipBexStringsIfLanguage ? DEH_SKIP_BEX_STRINGS_IF_LANGUAGE : 0);
 
 	// [RH] Add any .deh and .bex files on the command line.
 	// If there are none, try adding any in the config file.
@@ -3449,13 +3416,13 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 			if (stricmp (key, "Path") == 0 && FileExists (value))
 			{
 				if (!batchrun) Printf ("Applying patch %s\n", value);
-				D_LoadDehFile(value);
+				D_LoadDehFile(value, 0);
 			}
 		}
 	}
 
 	// Load embedded Dehacked patches
-	D_LoadDehLumps(FromPWADs);
+	D_LoadDehLumps(FromPWADs, 0);
 
 	// Create replacements for dehacked pickups
 	FinishDehPatch();
@@ -3880,6 +3847,7 @@ int GameMain()
 	M_SaveDefaultsFinal();
 	DeleteStartupScreen();
 	C_UninitCVars(); // must come last so that nothing will access the CVARs anymore after deletion.
+	CloseWidgetResources();
 	delete Args;
 	Args = nullptr;
 	return ret;
@@ -3976,7 +3944,7 @@ void D_Cleanup()
 //
 //==========================================================================
 
-UNSAFE_CCMD(restart)
+UNSAFE_CCMD(debug_restart)
 {
 	// remove command line args that would get in the way during restart
 	Args->RemoveArgs("-iwad");

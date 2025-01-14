@@ -1203,6 +1203,12 @@ OptionValue AlwaysTally
 	2,	"$OPTVAL_WITHHUBS"
 }
 
+OptionValue SaveOrder
+{
+	0,	"$OPTVAL_ALPHABETICAL"
+	1,	"$OPTVAL_LASTSAVEDTIME"
+}
+
 OptionMenu "MiscOptions" protected
 {
 	Title "$MISCMNU_TITLE"
@@ -1227,6 +1233,7 @@ OptionMenu "MiscOptions" protected
 	Slider "$MISCMNU_AUTOSAVECOUNT",			"autosavecount", 1, 20, 1, 0
 	Option "$MISCMNU_QUICKSAVEROTATION",		"quicksaverotation", "OnOff"
 	Slider "$MISCMNU_QUICKSAVECOUNT",			"quicksaverotationcount", 1, 20, 1, 0
+	Option "$MISCMNU_SAVEORDER",				"save_sort_order", "SaveOrder"
 	Option "$MISCMNU_DEHLOAD",					"dehload", "dehopt"
 	Option "$MISCMNU_ENABLESCRIPTSCREENSHOTS",	"enablescriptscreenshot", "OnOff"
 	Option "$MISCMNU_SETSLOTSTRICT",			"setslotstrict", "YesNo"
@@ -1946,6 +1953,7 @@ OptionMenu SoundOptions protected
 	StaticText " "
 	Slider "$SNDMNU_SFXVOLUME",			"snd_sfxvolume", 0, 1, 0.05, 2
 	Slider "$SNDMNU_MUSICVOLUME",		"snd_musicvolume", 0, 1, 0.05, 2
+	Slider "$SNDMNU_FOOTSTEPVOLUME",	"snd_footstepvolume", 0, 1, 0.05, 2
 	StaticText " "
 	Slider "$SNDMNU_MENUVOLUME",		"snd_menuvolume", 0, 1, 0.05, 2
 	StaticText " "
@@ -2068,11 +2076,17 @@ OptionValue ModVolumeRamps
 	2.0, "$OPTVAL_FULLRAMPING"
 }
 
+OptionValue ModReplayers
+{
+	0.0, "$OPTVAL_LIBXMP"
+	1.0, "$OPTVAL_DUMB"
+}
 
 
 OptionMenu ModReplayerOptions protected
 {
 	Title "$MODMNU_TITLE"
+	Option "$MODMNU_REPLAYER",				"mod_preferred_player", "ModReplayers"
 	Slider "$MODMNU_MASTERVOLUME",			"mod_dumb_mastervolume", 0.25, 4, 0.1, 1
 	Option "$ADVSNDMNU_SAMPLERATE",			"mod_samplerate", "SampleRates"
 	Option "$MODMNU_QUALITY",				"mod_interp", "ModQuality"
@@ -2267,6 +2281,7 @@ OptionValue ScaleModes
 	4, "1280x800"
 	5, "$OPTVAL_CUSTOM"
 	1, "$OPTVAL_LOWEST"
+	7, "$OPTVAL_LOWEST12"
 }
 OptionValue CropAspect
 {
@@ -2371,10 +2386,9 @@ OptionMenu NetworkOptions protected
 {
 	Title "$NETMNU_TITLE"
 	StaticText "$NETMNU_LOCALOPTIONS", 1
-	Option "$NETMNU_MOVEPREDICTION",		"cl_noprediction", "OffOn"
 	Option "$NETMNU_LINESPECIALPREDICTION",	"cl_predict_specials", "OnOff"
-	Slider "$NETMNU_PREDICTIONLERPSCALE",	"cl_predict_lerpscale", 0.0, 0.5, 0.05, 2
-	Slider "$NETMNU_LERPTHRESHOLD",			"cl_predict_lerpthreshold", 0.1, 16.0, 0.1
+	Slider "$NETMNU_PREDICTIONLERPSCALE",	"cl_rubberband_scale", 0.0, 1.0, 0.05, 2
+	Slider "$NETMNU_LERPTHRESHOLD",			"cl_rubberband_threshold", 0.0, 256.0, 8.0
 	StaticText " "
 	StaticText "$NETMNU_HOSTOPTIONS", 1
 	Option "$NETMNU_EXTRATICS",				"net_extratic", "ExtraTicMode"
@@ -2401,6 +2415,7 @@ OptionValue "SpriteclipModes"
 	1, "$OPTVAL_SMART"
 	2, "$OPTVAL_ALWAYS"
 	3, "$OPTVAL_SMARTER"
+	-1, "$OPTVAL_ANAMORPHIC"
 }
 
 OptionValue "EnhancedStealth"
